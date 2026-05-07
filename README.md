@@ -61,3 +61,18 @@ In Supabase Auth settings, set the Site URL to your production domain and add th
 - `https://what2-sing.vercel.app/zh/login`
 - `http://localhost:3000/en/login`
 - `http://localhost:3000/zh/login`
+
+### iPhone Home Screen login code
+
+iOS opens email magic links in Safari, while a Home Screen web app keeps a separate Supabase session. To log in inside the installed Home Screen app, the auth email must show Supabase's one-time token so the user can copy it back into KTV-Picker.
+
+In Supabase Dashboard, go to **Authentication → Email Templates → Magic Link** and include `{{ .Token }}` in the email body. Example:
+
+```html
+<p>Your KTV-Picker login code is:</p>
+<p style="font-size: 28px; font-weight: 700; letter-spacing: 0.25em;">{{ .Token }}</p>
+<p>Or open this magic link in your browser:</p>
+<p><a href="{{ .ConfirmationURL }}">Log in to KTV-Picker</a></p>
+```
+
+Save the template, then request a new login email from the Home Screen app.
