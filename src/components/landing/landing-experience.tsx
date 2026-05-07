@@ -3,15 +3,18 @@
 import {motion} from 'framer-motion';
 import {useLocale, useTranslations} from 'next-intl';
 import Link from 'next/link';
+import {useRouter} from 'next/navigation';
 import {useMemo, useState} from 'react';
 import {normalizeSongs} from '@/lib/importers/manual';
 import type {ImportedSong} from '@/lib/importers/qq';
+import {PICKER_STORAGE_KEY, serializeImportedSongs} from '@/lib/picker/session';
 
 const sampleSongs = '青花瓷 - 周杰伦\n后来 - 刘若英\n修炼爱情 - 林俊杰\n倔强 - 五月天';
 
 export function LandingExperience() {
   const t = useTranslations('landing');
   const locale = useLocale();
+  const router = useRouter();
   const nextLocale = locale === 'zh' ? 'en' : 'zh';
   const [url, setUrl] = useState('');
   const [text, setText] = useState('');
@@ -57,6 +60,7 @@ export function LandingExperience() {
       }
 
       const nextSongs = [...importedSongs, ...manualSongs];
+      window.localStorage.setItem(PICKER_STORAGE_KEY, serializeImportedSongs(nextSongs));
       setSongs(nextSongs);
       setStatus('done');
       setMessage(t('imported', {count: nextSongs.length}));
@@ -156,9 +160,16 @@ export function LandingExperience() {
               <p className={`mt-3 text-sm ${status === 'error' ? 'text-karaoke' : 'text-karaoke-cyan'}`}>{message}</p>
             ) : null}
             {status === 'done' ? (
-              <p className="mt-2 rounded-2xl border border-karaoke-cyan/20 bg-karaoke-cyan/10 px-3 py-2 text-xs leading-5 text-ink-soft">
-                {t('nextAfterImport')}
-              </p>
+              <div className="mt-2 rounded-2xl border border-karaoke-cyan/20 bg-karaoke-cyan/10 p-3">
+                <p className="text-xs leading-5 text-ink-soft">{t('nextAfterImport')}</p>
+                <button
+                  type="button"
+                  onClick={() => router.push(`/${locale}/pick`)}
+                  className="mt-3 h-11 w-full rounded-xl bg-karaoke-cyan text-sm font-black text-canvas transition hover:scale-[1.01]"
+                >
+                  {t('startPicking')}
+                </button>
+              </div>
             ) : null}
           </div>
 

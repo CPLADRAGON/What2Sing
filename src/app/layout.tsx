@@ -1,4 +1,4 @@
-import type {Metadata} from 'next';
+import type {Metadata, Viewport} from 'next';
 import {Manrope, Noto_Sans_SC} from 'next/font/google';
 import './globals.css';
 
@@ -7,7 +7,26 @@ const notoSansSc = Noto_Sans_SC({subsets: ['latin'], weight: ['400', '500', '700
 
 export const metadata: Metadata = {
   title: 'KTV-Picker',
-  description: 'Mobile-first KTV song importing and picking.'
+  description: 'Mobile-first KTV song importing and picking.',
+  applicationName: 'KTV-Picker',
+  manifest: '/manifest.webmanifest',
+  appleWebApp: {
+    capable: true,
+    title: 'What2Sing',
+    statusBarStyle: 'black-translucent'
+  },
+  icons: {
+    icon: [
+      {url: '/icon.svg', type: 'image/svg+xml'},
+      {url: '/icon-192.png', sizes: '192x192', type: 'image/png'},
+      {url: '/icon-512.png', sizes: '512x512', type: 'image/png'}
+    ],
+    apple: [{url: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png'}]
+  }
+};
+
+export const viewport: Viewport = {
+  themeColor: '#050507'
 };
 
 export default function RootLayout({children}: {children: React.ReactNode}) {

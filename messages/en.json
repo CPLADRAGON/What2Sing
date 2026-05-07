@@ -15,7 +15,8 @@
     "sampleButton": "Use sample list",
     "emptyHint": "Paste a URL or at least one song line to begin.",
     "imported": "Imported {count} songs",
-    "nextAfterImport": "Next: review the preview list. Swipe picking and room sync are the next build step.",
+    "nextAfterImport": "Next: review the preview list, then start picking.",
+    "startPicking": "Start picking",
     "features": {
       "import": "QQ Music parser",
       "swipe": "Swipe-ready queue",
@@ -24,5 +25,18 @@
     "previewTitle": "Tonight's candidates",
     "steps": ["Import", "Swipe", "Sing together"],
     "language": "中文"
+  },
+  "picker": {
+    "title": "Pick",
+    "loading": "Loading your songs...",
+    "emptyTitle": "Import songs first",
+    "emptyBody": "Paste a QQ Music link or song text on the import page, then come back here to swipe through the deck.",
+    "backToImport": "Import",
+    "gestureHint": "Swipe right or tap Pick to add it to tonight's list. Swipe left or tap Skip to pass for now.",
+    "skip": "Skip",
+    "pick": "Pick",
+    "completeEyebrow": "Queue ready",
+    "completeTitle": "Tonight's picks",
+    "completeBody": "You picked {count} songs. Room sync is next so friends can vote together."
   }
 }
