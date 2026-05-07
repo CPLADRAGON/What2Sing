@@ -6,6 +6,7 @@ import Link from 'next/link';
 import {useRouter} from 'next/navigation';
 import {useEffect, useMemo, useState} from 'react';
 import {loadLatestPickerStateForCurrentUser, savePickerStateForCurrentUser} from '@/lib/picker/persistence';
+import {generateSingingOrder, pickRandomSong} from '@/lib/picker/queue';
 import {
   canEnterSelectionMode,
   chooseCurrentSong,
@@ -37,6 +38,8 @@ export function PickerExperience() {
   const [viewMode, setViewMode] = useState<'swipe' | 'selection'>('swipe');
   const [swipeDirection, setSwipeDirection] = useState<1 | -1 | 0>(0);
   const [saveMessage, setSaveMessage] = useState('');
+  const [isDragging, setIsDragging] = useState(false);
+  const [isSwipeLocked, setIsSwipeLocked] = useState(false);
   const loaded = state !== null;
   const safeState = state ?? createPickerState([]);
   const currentSong = getCurrentSong(safeState);
@@ -80,6 +83,10 @@ export function PickerExperience() {
     }
 
     const interval = window.setInterval(() => {
+      if (isDragging || isSwipeLocked) {
+        return;
+      }
+
       void loadLatestPickerStateForCurrentUser().then((remoteSession) => {
         if (!remoteSession) {
           return;
@@ -99,7 +106,7 @@ export function PickerExperience() {
     }, 15000);
 
     return () => window.clearInterval(interval);
-  }, [needsOrderChoice]);
+  }, [isDragging, isSwipeLocked, needsOrderChoice]);
 
   useEffect(() => {
     x.set(0);
@@ -125,12 +132,23 @@ export function PickerExperience() {
   }
 
   function decide(decision: PickerDecision) {
+    if (isSwipeLocked || !currentSong) {
+      return;
+    }
+
+    setIsSwipeLocked(true);
     setSwipeDirection(decision === 'like' ? 1 : -1);
     vibrate();
     setState((current) => (current ? chooseCurrentSong(current, decision) : current));
+    window.setTimeout(() => {
+      setIsSwipeLocked(false);
+      x.set(0);
+    }, 220);
   }
 
   function handleDragEnd(_: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) {
+    setIsDragging(false);
+
     if (info.offset.x > 88 || info.velocity.x > 620) {
       decide('like');
       return;
@@ -233,7 +251,7 @@ export function PickerExperience() {
               </div>
             ))}
 
-            <AnimatePresence mode="wait" custom={swipeDirection}>
+            <AnimatePresence custom={swipeDirection}>
               {currentSong && !complete ? (
                 <motion.article
                   key={`${currentSong.title}-${currentSong.artist}-${safeState.currentIndex}`}
@@ -241,12 +259,13 @@ export function PickerExperience() {
                   drag="x"
                   dragConstraints={{left: 0, right: 0}}
                   dragElastic={0.22}
+                  onDragStart={() => setIsDragging(true)}
                   onDragEnd={handleDragEnd}
                   style={{x, rotate, scale}}
-                  initial={{opacity: 0, y: 32, rotate: -2}}
+                  initial={{opacity: 0, y: 18, scale: 0.98}}
                   animate={{opacity: 1, y: 0, rotate: 0}}
-                  exit={{opacity: 0, x: swipeDirection * 420, rotate: swipeDirection * 16, scale: 0.92}}
-                  transition={{type: 'spring', stiffness: 280, damping: 28}}
+                  exit={{opacity: 0, x: swipeDirection * 460, rotate: swipeDirection * 18, scale: 0.9, transition: {duration: 0.2, ease: 'easeOut'}}}
+                  transition={{type: 'spring', stiffness: 380, damping: 30, mass: 0.8}}
                   className="absolute inset-0 flex touch-pan-y cursor-grab flex-col justify-between rounded-[2.25rem] border border-hairline-strong bg-[linear-gradient(145deg,rgba(255,255,255,0.13),rgba(255,255,255,0.035))] p-7 shadow-glow backdrop-blur-xl active:cursor-grabbing"
                 >
                   <motion.div style={{opacity: skipOpacity}} className="pointer-events-none absolute left-6 top-20 rotate-[-10deg] rounded-2xl border-2 border-karaoke px-4 py-2 text-lg font-black uppercase tracking-[0.18em] text-karaoke">
@@ -281,7 +300,7 @@ export function PickerExperience() {
             <button
               type="button"
               onClick={() => decide('skip')}
-              disabled={!currentSong}
+              disabled={!currentSong || isSwipeLocked}
               className="h-14 rounded-2xl border border-white/10 bg-white/[0.04] text-sm font-black text-ink-soft transition hover:bg-white/10 disabled:opacity-40"
             >
               {t('skip')}
@@ -289,7 +308,7 @@ export function PickerExperience() {
             <button
               type="button"
               onClick={() => decide('like')}
-              disabled={!currentSong}
+              disabled={!currentSong || isSwipeLocked}
               className="h-14 rounded-2xl bg-white text-sm font-black text-canvas transition hover:scale-[1.01] disabled:opacity-40"
             >
               {t('pick')}
@@ -311,6 +330,18 @@ export function PickerExperience() {
 
 function SelectionPanel({state, onRemove, onContinue, onFinish}: {state: PickerState; onRemove: (index: number) => void; onContinue: () => void; onFinish: () => void}) {
   const t = useTranslations('picker');
+  const [queueLimit, setQueueLimit] = useState<number | 'all'>('all');
+  const [singingOrder, setSingingOrder] = useState(state.liked);
+  const [randomSong, setRandomSong] = useState<PickerState['liked'][number] | null>(state.liked[0] ?? null);
+
+  function generateQueue() {
+    setSingingOrder(generateSingingOrder(state.liked, {limit: queueLimit, seed: `${Date.now()}-${state.liked.length}`}));
+    setRandomSong(null);
+  }
+
+  function chooseRandomSong() {
+    setRandomSong(pickRandomSong(state.liked, `${Date.now()}-${state.liked.length}`));
+  }
 
   return (
     <section className="relative z-10 mx-auto flex min-h-[calc(100vh-6rem)] max-w-md flex-col py-8">
@@ -318,14 +349,52 @@ function SelectionPanel({state, onRemove, onContinue, onFinish}: {state: PickerS
         <p className="text-xs font-bold uppercase tracking-[0.24em] text-karaoke-cyan">{state.liked.length} songs</p>
         <h1 className="mt-3 font-display text-4xl font-black tracking-[-0.06em]">{t('selectionTitle')}</h1>
         <p className="mt-3 text-sm leading-6 text-body-muted">{t('selectionBody')}</p>
+        <div className="mt-5 rounded-[1.5rem] border border-karaoke-cyan/20 bg-karaoke-cyan/10 p-4">
+          <p className="text-xs font-black uppercase tracking-[0.2em] text-karaoke-cyan">{t('queueTools')}</p>
+          <div className="mt-3 grid grid-cols-3 gap-2">
+            {(['all', 5, 10] as const).map((limit) => (
+              <button
+                key={limit}
+                type="button"
+                onClick={() => setQueueLimit(limit)}
+                className={`h-9 rounded-xl text-xs font-black transition ${queueLimit === limit ? 'bg-white text-canvas' : 'border border-white/10 bg-white/[0.04] text-ink-soft'}`}
+              >
+                {limit === 'all' ? t('queueLimitAll') : limit}
+              </button>
+            ))}
+          </div>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <button type="button" onClick={generateQueue} disabled={!state.liked.length} className="h-11 rounded-2xl bg-karaoke-cyan text-xs font-black text-canvas disabled:opacity-40">
+              {t('generateQueue')}
+            </button>
+            <button type="button" onClick={chooseRandomSong} disabled={!state.liked.length} className="h-11 rounded-2xl border border-white/10 bg-white/[0.04] text-xs font-black text-ink-soft disabled:opacity-40">
+              {t('pickOneRandom')}
+            </button>
+          </div>
+          {randomSong ? (
+            <div className="mt-3 rounded-2xl border border-karaoke/30 bg-karaoke/10 px-4 py-3">
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-karaoke">{t('nextSong')}</p>
+              <p className="mt-1 text-sm font-black text-white">{randomSong.title}</p>
+              <p className="text-xs text-body-muted">{randomSong.artist}</p>
+            </div>
+          ) : null}
+        </div>
         <div className="mt-5 max-h-[52vh] space-y-2 overflow-y-auto pr-1">
-          {state.liked.map((song, index) => (
+          {singingOrder.map((song, index) => (
             <div key={`${song.title}-${song.artist}-${index}`} className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
               <div>
-                <p className="text-sm font-bold">{song.title}</p>
+                <p className="text-sm font-bold"><span className="mr-2 text-karaoke-cyan">#{index + 1}</span>{song.title}</p>
                 <p className="text-xs text-body-muted">{song.artist}</p>
               </div>
-              <button type="button" onClick={() => onRemove(index)} className="rounded-full border border-white/10 px-3 py-1 text-xs text-ink-soft">
+              <button
+                type="button"
+                onClick={() => {
+                  onRemove(state.liked.findIndex((picked) => picked.title === song.title && picked.artist === song.artist));
+                  setSingingOrder((current) => current.filter((queued) => queued.title !== song.title || queued.artist !== song.artist));
+                  setRandomSong((current) => (current?.title === song.title && current.artist === song.artist ? null : current));
+                }}
+                className="rounded-full border border-white/10 px-3 py-1 text-xs text-ink-soft"
+              >
                 {t('remove')}
               </button>
             </div>

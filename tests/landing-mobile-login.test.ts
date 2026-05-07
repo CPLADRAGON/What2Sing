@@ -10,4 +10,26 @@ describe('landing mobile navigation', () => {
     expect(loginLinkLine).not.toContain('hidden');
     expect(loginLinkLine).not.toContain('sm:inline-flex');
   });
+
+  it('shows signed-in user identity beside the login action', () => {
+    const source = readFileSync('src/components/landing/landing-experience.tsx', 'utf8');
+
+    expect(source).toContain('displayName');
+    expect(source).toContain('getUserDisplayName');
+  });
+
+  it('makes the tonight candidates panel interactive', () => {
+    const source = readFileSync('src/components/landing/landing-experience.tsx', 'utf8');
+
+    expect(source).toContain('generateSingingOrder');
+    expect(source).toContain('pickRandomSong');
+    expect(source).toContain('setShowAllSelected');
+  });
+
+  it('uses immediate card transitions instead of waiting for exit animations', () => {
+    const source = readFileSync('src/components/picker/picker-experience.tsx', 'utf8');
+
+    expect(source).not.toContain('mode="wait"');
+    expect(source).toContain('isSwipeLocked');
+  });
 });

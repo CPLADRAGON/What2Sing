@@ -5,10 +5,13 @@ import {useLocale, useTranslations} from 'next-intl';
 import Link from 'next/link';
 import {useRouter} from 'next/navigation';
 import {useEffect, useMemo, useState} from 'react';
+import {getUserDisplayName} from '@/lib/auth/profile';
 import {normalizeSongs} from '@/lib/importers/manual';
 import type {ImportedSong} from '@/lib/importers/qq';
 import {loadLatestPickerStateForCurrentUser, saveImportedDeckForCurrentUser} from '@/lib/picker/persistence';
+import {generateSingingOrder, pickRandomSong} from '@/lib/picker/queue';
 import {chooseSyncedPickerState, deserializePickerState, PICKER_STORAGE_KEY, serializeImportedSongs, serializePickerState} from '@/lib/picker/session';
+import {supabase} from '@/lib/supabase';
 
 const sampleSongs = '青花瓷 - 周杰伦\n后来 - 刘若英\n修炼爱情 - 林俊杰\n倔强 - 五月天';
 
@@ -24,6 +27,11 @@ export function LandingExperience() {
   const [message, setMessage] = useState('');
   const [hasSavedProgress, setHasSavedProgress] = useState(false);
   const [savedLikedSongs, setSavedLikedSongs] = useState<ImportedSong[]>([]);
+  const [displayName, setDisplayName] = useState<string | null>(null);
+  const [showAllSelected, setShowAllSelected] = useState(false);
+  const [queueLimit, setQueueLimit] = useState<number | 'all'>('all');
+  const [generatedQueue, setGeneratedQueue] = useState<ImportedSong[]>([]);
+  const [randomSong, setRandomSong] = useState<ImportedSong | null>(null);
   const steps = t.raw('steps') as string[];
   const loadingSteps = t.raw('loadingSteps') as string[];
 
@@ -55,6 +63,30 @@ export function LandingExperience() {
       isMounted = false;
     };
   }, []);
+
+  useEffect(() => {
+    const client = supabase;
+
+    if (!client) {
+      return;
+    }
+
+    void client.auth.getSession().then(({data}) => setDisplayName(getUserDisplayName(data.session?.user ?? null)));
+    const {data: subscription} = client.auth.onAuthStateChange((_event, session) => {
+      setDisplayName(getUserDisplayName(session?.user ?? null));
+    });
+
+    return () => subscription.subscription.unsubscribe();
+  }, []);
+
+  function generateLandingQueue() {
+    setGeneratedQueue(generateSingingOrder(savedLikedSongs, {limit: queueLimit, seed: `${Date.now()}-${savedLikedSongs.length}`}));
+    setRandomSong(null);
+  }
+
+  function pickLandingRandomSong() {
+    setRandomSong(pickRandomSong(savedLikedSongs, `${Date.now()}-${savedLikedSongs.length}`));
+  }
 
   async function handleImport() {
     setMessage('');
@@ -119,6 +151,11 @@ export function LandingExperience() {
           <span className="hidden xs:inline sm:inline">KTV-Picker</span>
         </Link>
         <div className="flex items-center gap-2">
+        {displayName ? (
+          <span className="max-w-[8rem] truncate rounded-full border border-karaoke-cyan/30 bg-karaoke-cyan/10 px-2.5 py-1.5 text-xs font-black text-karaoke-cyan sm:max-w-none sm:px-3">
+            {displayName}
+          </span>
+        ) : null}
         <Link href={`/${nextLocale}`} className="rounded-full border border-hairline-strong px-2.5 py-1.5 text-xs text-ink-soft transition hover:border-white/30 hover:bg-white/10 sm:px-3">
           {t('language')}
         </Link>
@@ -246,16 +283,51 @@ export function LandingExperience() {
                 <span className="h-2 w-2 rounded-full bg-white/40" />
               </div>
             </div>
+            {savedLikedSongs.length ? (
+              <div className="mb-3 rounded-2xl border border-karaoke-cyan/20 bg-karaoke-cyan/10 p-3">
+                <p className="text-xs leading-5 text-ink-soft">{t('selectedCount', {count: savedLikedSongs.length})}</p>
+                <div className="mt-3 grid grid-cols-3 gap-2">
+                  {(['all', 5, 10] as const).map((limit) => (
+                    <button
+                      key={limit}
+                      type="button"
+                      onClick={() => setQueueLimit(limit)}
+                      className={`h-9 rounded-xl text-xs font-black transition ${queueLimit === limit ? 'bg-white text-canvas' : 'border border-white/10 bg-white/[0.04] text-ink-soft'}`}
+                    >
+                      {limit === 'all' ? t('queueLimitAll') : limit}
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-3 grid grid-cols-3 gap-2">
+                  <button type="button" onClick={() => setShowAllSelected((value) => !value)} className="h-10 rounded-xl border border-white/10 bg-white/[0.04] text-xs font-black text-ink-soft">
+                    {showAllSelected ? t('collapseSelected') : t('viewAllSelected')}
+                  </button>
+                  <button type="button" onClick={generateLandingQueue} className="h-10 rounded-xl bg-karaoke-cyan text-xs font-black text-canvas">
+                    {t('generateQueue')}
+                  </button>
+                  <button type="button" onClick={pickLandingRandomSong} className="h-10 rounded-xl bg-white text-xs font-black text-canvas">
+                    {t('pickOneRandom')}
+                  </button>
+                </div>
+                {randomSong ? (
+                  <div className="mt-3 rounded-2xl border border-karaoke/30 bg-karaoke/10 px-3 py-2">
+                    <p className="text-[10px] font-black uppercase tracking-[0.18em] text-karaoke">{t('nextSong')}</p>
+                    <p className="mt-1 text-sm font-black text-white">{randomSong.title}</p>
+                    <p className="text-xs text-body-muted">{randomSong.artist}</p>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
             <div className="space-y-2">
               {status === 'loading' ? [0, 1, 2, 3].map((index) => (
                 <div key={index} className="animate-pulse rounded-2xl border border-white/8 bg-white/[0.035] px-3 py-3">
                   <div className="h-4 w-2/3 rounded-full bg-white/10" />
                   <div className="mt-2 h-3 w-1/3 rounded-full bg-white/5" />
                 </div>
-              )) : previewSongs.map((song, index) => (
+              )) : (generatedQueue.length ? generatedQueue : showAllSelected ? savedLikedSongs : previewSongs).map((song, index) => (
                 <div key={`${song.title}-${song.artist}-${index}`} className="flex items-center justify-between rounded-2xl border border-white/8 bg-white/[0.035] px-3 py-3">
                   <div>
-                    <p className="text-sm font-bold text-white">{song.title}</p>
+                    <p className="text-sm font-bold text-white">{generatedQueue.length ? <span className="mr-2 text-karaoke-cyan">#{index + 1}</span> : null}{song.title}</p>
                     <p className="text-xs text-body-muted">{song.artist}</p>
                   </div>
                   <span className="rounded-full bg-white/10 px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] text-ink-soft">
