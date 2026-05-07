@@ -29,7 +29,7 @@ export function createPickerState(songs: ImportedSong[], options: CreatePickerSt
     liked: [],
     skipped: [],
     orderMode,
-    updatedAt: new Date(0).toISOString()
+    updatedAt: new Date().toISOString()
   };
 }
 
@@ -113,6 +113,26 @@ export function removeLikedSong(state: PickerState, indexToRemove: number): Pick
     liked: state.liked.filter((_, index) => index !== indexToRemove),
     updatedAt: new Date().toISOString()
   };
+}
+
+export function finishPickerQueue(state: PickerState): PickerState {
+  return {
+    ...state,
+    currentIndex: state.deck.length,
+    updatedAt: new Date().toISOString()
+  };
+}
+
+export function chooseSyncedPickerState(localState: PickerState | null, remoteState: PickerState | null): PickerState | null {
+  if (!localState) {
+    return remoteState;
+  }
+
+  if (!remoteState) {
+    return localState;
+  }
+
+  return Date.parse(remoteState.updatedAt) > Date.parse(localState.updatedAt) ? remoteState : localState;
 }
 
 export function deserializeImportedSongs(value: string | null): ImportedSong[] {

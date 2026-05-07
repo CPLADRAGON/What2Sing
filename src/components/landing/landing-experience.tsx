@@ -7,8 +7,8 @@ import {useRouter} from 'next/navigation';
 import {useEffect, useMemo, useState} from 'react';
 import {normalizeSongs} from '@/lib/importers/manual';
 import type {ImportedSong} from '@/lib/importers/qq';
-import {saveImportedDeckForCurrentUser} from '@/lib/picker/persistence';
-import {deserializePickerState, PICKER_STORAGE_KEY, serializeImportedSongs} from '@/lib/picker/session';
+import {loadLatestPickerStateForCurrentUser, saveImportedDeckForCurrentUser} from '@/lib/picker/persistence';
+import {chooseSyncedPickerState, deserializePickerState, PICKER_STORAGE_KEY, serializeImportedSongs, serializePickerState} from '@/lib/picker/session';
 
 const sampleSongs = '青花瓷 - 周杰伦\n后来 - 刘若英\n修炼爱情 - 林俊杰\n倔强 - 五月天';
 
@@ -23,21 +23,37 @@ export function LandingExperience() {
   const [status, setStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
   const [message, setMessage] = useState('');
   const [hasSavedProgress, setHasSavedProgress] = useState(false);
+  const [savedLikedSongs, setSavedLikedSongs] = useState<ImportedSong[]>([]);
   const steps = t.raw('steps') as string[];
   const loadingSteps = t.raw('loadingSteps') as string[];
 
   const previewSongs = useMemo(
-    () => (songs.length ? songs : normalizeSongs(sampleSongs)).slice(0, 4),
-    [songs]
+    () => (songs.length ? songs : savedLikedSongs.length ? savedLikedSongs : normalizeSongs(sampleSongs)).slice(0, 4),
+    [savedLikedSongs, songs]
   );
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      const savedState = deserializePickerState(window.localStorage.getItem(PICKER_STORAGE_KEY));
-      setHasSavedProgress(Boolean(savedState && (savedState.currentIndex > 0 || savedState.liked.length > 0 || savedState.skipped.length > 0)));
-    }, 0);
+    let isMounted = true;
 
-    return () => window.clearTimeout(timer);
+    async function loadSavedProgress() {
+      const localState = deserializePickerState(window.localStorage.getItem(PICKER_STORAGE_KEY));
+      const remoteSession = await loadLatestPickerStateForCurrentUser();
+      const savedState = chooseSyncedPickerState(localState, remoteSession?.state ?? null);
+
+      if (!isMounted || !savedState) {
+        return;
+      }
+
+      window.localStorage.setItem(PICKER_STORAGE_KEY, serializePickerState(savedState));
+      setHasSavedProgress(savedState.currentIndex > 0 || savedState.liked.length > 0 || savedState.skipped.length > 0);
+      setSavedLikedSongs(savedState.liked);
+    }
+
+    void loadSavedProgress();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   async function handleImport() {
@@ -135,6 +151,16 @@ export function LandingExperience() {
           {hasSavedProgress ? (
             <div className="mt-5 rounded-3xl border border-karaoke-cyan/25 bg-karaoke-cyan/10 p-4 sm:max-w-lg">
               <p className="text-sm text-ink-soft">{t('savedProgress')}</p>
+              {savedLikedSongs.length ? (
+                <div className="mt-3 space-y-2">
+                  {savedLikedSongs.slice(0, 3).map((song, index) => (
+                    <div key={`${song.title}-${song.artist}-${index}`} className="rounded-2xl border border-karaoke-cyan/20 bg-black/20 px-3 py-2">
+                      <p className="text-sm font-bold text-white">{song.title}</p>
+                      <p className="text-xs text-body-muted">{song.artist}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
               <button type="button" onClick={() => router.push(`/${locale}/pick`)} className="mt-3 h-11 rounded-2xl bg-karaoke-cyan px-5 text-sm font-black text-canvas">
                 {t('resumePicking')}
               </button>

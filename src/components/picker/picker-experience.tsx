@@ -5,12 +5,14 @@ import {useLocale, useTranslations} from 'next-intl';
 import Link from 'next/link';
 import {useRouter} from 'next/navigation';
 import {useEffect, useMemo, useState} from 'react';
-import {savePickerStateForCurrentUser} from '@/lib/picker/persistence';
+import {loadLatestPickerStateForCurrentUser, savePickerStateForCurrentUser} from '@/lib/picker/persistence';
 import {
   canEnterSelectionMode,
   chooseCurrentSong,
+  chooseSyncedPickerState,
   createPickerState,
   deserializePickerState,
+  finishPickerQueue,
   getCurrentSong,
   isPickerComplete,
   PICKER_STORAGE_KEY,
@@ -42,15 +44,62 @@ export function PickerExperience() {
   const progress = safeState.deck.length ? Math.min(100, Math.round((safeState.currentIndex / safeState.deck.length) * 100)) : 0;
 
   useEffect(() => {
-    const timer = window.setTimeout(() => {
-      const raw = window.localStorage.getItem(PICKER_STORAGE_KEY);
-      const restoredState = deserializePickerState(raw);
-      setState(restoredState ?? createPickerState([]));
-      setNeedsOrderChoice(isRawImportDeck(raw));
-    }, 0);
+    let isMounted = true;
 
-    return () => window.clearTimeout(timer);
+    async function loadSavedProgress() {
+      const raw = window.localStorage.getItem(PICKER_STORAGE_KEY);
+      const localState = deserializePickerState(raw);
+
+      if (isMounted) {
+        setState(localState ?? createPickerState([]));
+        setNeedsOrderChoice(isRawImportDeck(raw));
+      }
+
+      const remoteSession = await loadLatestPickerStateForCurrentUser();
+
+      if (!isMounted || !remoteSession) {
+        return;
+      }
+
+      const syncedState = chooseSyncedPickerState(localState, remoteSession.state) ?? createPickerState([]);
+      window.localStorage.setItem(PICKER_STORAGE_KEY, serializePickerState(syncedState));
+      setState(syncedState);
+      setNeedsOrderChoice(false);
+    }
+
+    void loadSavedProgress();
+
+    return () => {
+      isMounted = false;
+    };
   }, []);
+
+  useEffect(() => {
+    if (needsOrderChoice) {
+      return;
+    }
+
+    const interval = window.setInterval(() => {
+      void loadLatestPickerStateForCurrentUser().then((remoteSession) => {
+        if (!remoteSession) {
+          return;
+        }
+
+        setState((current) => {
+          const syncedState = chooseSyncedPickerState(current, remoteSession.state);
+
+          if (!syncedState || syncedState === current) {
+            return current;
+          }
+
+          window.localStorage.setItem(PICKER_STORAGE_KEY, serializePickerState(syncedState));
+          return syncedState;
+        });
+      });
+    }, 15000);
+
+    return () => window.clearInterval(interval);
+  }, [needsOrderChoice]);
 
   useEffect(() => {
     x.set(0);
@@ -158,7 +207,15 @@ export function PickerExperience() {
       {saveMessage ? <p className="relative z-10 mx-auto mt-2 max-w-md text-center text-xs text-karaoke-cyan">{saveMessage}</p> : null}
 
       {viewMode === 'selection' ? (
-        <SelectionPanel state={safeState} onRemove={(index) => setState((current) => (current ? removeLikedSong(current, index) : current))} onContinue={() => setViewMode('swipe')} />
+        <SelectionPanel
+          state={safeState}
+          onRemove={(index) => setState((current) => (current ? removeLikedSong(current, index) : current))}
+          onContinue={() => setViewMode('swipe')}
+          onFinish={() => {
+            setState((current) => (current ? finishPickerQueue(current) : current));
+            setViewMode('swipe');
+          }}
+        />
       ) : (
         <section className="relative z-10 mx-auto flex min-h-[calc(100vh-6rem)] max-w-md flex-col justify-center pb-5 pt-8">
           <div className="mb-5 h-2 overflow-hidden rounded-full bg-white/10">
@@ -252,7 +309,7 @@ export function PickerExperience() {
   );
 }
 
-function SelectionPanel({state, onRemove, onContinue}: {state: PickerState; onRemove: (index: number) => void; onContinue: () => void}) {
+function SelectionPanel({state, onRemove, onContinue, onFinish}: {state: PickerState; onRemove: (index: number) => void; onContinue: () => void; onFinish: () => void}) {
   const t = useTranslations('picker');
 
   return (
@@ -278,7 +335,7 @@ function SelectionPanel({state, onRemove, onContinue}: {state: PickerState; onRe
           <button type="button" onClick={onContinue} className="h-12 rounded-2xl border border-white/10 bg-white/[0.04] text-sm font-black text-ink-soft">
             {t('continueSwiping')}
           </button>
-          <button type="button" className="h-12 rounded-2xl bg-white text-sm font-black text-canvas">
+          <button type="button" onClick={onFinish} className="h-12 rounded-2xl bg-white text-sm font-black text-canvas">
             {t('finishQueue')}
           </button>
         </div>

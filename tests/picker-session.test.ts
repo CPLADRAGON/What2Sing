@@ -2,9 +2,11 @@ import {describe, expect, it} from 'vitest';
 import {
   canEnterSelectionMode,
   chooseCurrentSong,
+  chooseSyncedPickerState,
   createPickerState,
   deserializeImportedSongs,
   deserializePickerState,
+  finishPickerQueue,
   getCurrentSong,
   isPickerComplete,
   removeLikedSong,
@@ -90,5 +92,22 @@ describe('picker session', () => {
     expect(canEnterSelectionMode(liked)).toBe(true);
     expect(removed.liked).toEqual([]);
     expect(canEnterSelectionMode(removed)).toBe(false);
+  });
+
+  it('chooses the newest picker progress when syncing devices', () => {
+    const local = {...chooseCurrentSong(createPickerState(songs), 'like'), updatedAt: '2026-05-07T08:00:00.000Z'};
+    const remote = {...chooseCurrentSong(chooseCurrentSong(createPickerState(songs), 'skip'), 'like'), updatedAt: '2026-05-07T08:02:00.000Z'};
+
+    expect(chooseSyncedPickerState(local, remote)).toEqual(remote);
+    expect(chooseSyncedPickerState(remote, local)).toEqual(remote);
+  });
+
+  it('finishes the queue so picked songs become the final KTV list', () => {
+    const liked = chooseCurrentSong(createPickerState(songs), 'like');
+    const finished = finishPickerQueue(liked);
+
+    expect(finished.currentIndex).toBe(songs.length);
+    expect(finished.liked).toEqual([songs[0]]);
+    expect(isPickerComplete(finished)).toBe(true);
   });
 });
