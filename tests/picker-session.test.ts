@@ -117,10 +117,30 @@ describe('picker session', () => {
     const second = chooseCurrentSong(first, 'skip');
     const restarted = restartWithUnselectedSongs(finishPickerQueue(second));
 
-    expect(restarted.deck).toEqual([songs[1], songs[2]]);
+    expect(restarted.deck).toHaveLength(2);
+    expect([...restarted.deck].sort((a, b) => a.title.localeCompare(b.title))).toEqual([songs[2], songs[1]].sort((a, b) => a.title.localeCompare(b.title)));
     expect(restarted.liked).toEqual([songs[0]]);
     expect(restarted.skipped).toEqual([]);
     expect(restarted.currentIndex).toBe(0);
     expect(isPickerComplete(restarted)).toBe(false);
+  });
+
+  it('can reshuffle unselected songs when restarting a completed pass', () => {
+    const longerDeck: ImportedSong[] = [
+      ...songs,
+      {title: '晴天', artist: '周杰伦', platform: 'qq', tags: []},
+      {title: '勇气', artist: '梁静茹', platform: 'manual', tags: []}
+    ];
+    const pickedFirst = chooseCurrentSong(createPickerState(longerDeck), 'like');
+    const skippedRest = longerDeck.slice(1).reduce((state) => chooseCurrentSong(state, 'skip'), pickedFirst);
+    const restarted = restartWithUnselectedSongs(finishPickerQueue(skippedRest), {orderMode: 'random', seed: 'reswipe-night'});
+    const originalUnselected = longerDeck.slice(1);
+
+    expect(restarted.deck).toHaveLength(originalUnselected.length);
+    expect(restarted.deck).not.toEqual(originalUnselected);
+    expect([...restarted.deck].sort((a, b) => a.title.localeCompare(b.title))).toEqual([...originalUnselected].sort((a, b) => a.title.localeCompare(b.title)));
+    expect(restarted.orderMode).toBe('random');
+    expect(restarted.liked).toEqual([longerDeck[0]]);
+    expect(restarted.currentIndex).toBe(0);
   });
 });

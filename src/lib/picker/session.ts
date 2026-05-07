@@ -8,6 +8,11 @@ export type CreatePickerStateOptions = {
   seed?: string;
 };
 
+export type RestartWithUnselectedSongsOptions = {
+  orderMode?: PickerOrderMode;
+  seed?: string;
+};
+
 export type PickerState = {
   deck: ImportedSong[];
   currentIndex: number;
@@ -123,14 +128,17 @@ export function finishPickerQueue(state: PickerState): PickerState {
   };
 }
 
-export function restartWithUnselectedSongs(state: PickerState): PickerState {
+export function restartWithUnselectedSongs(state: PickerState, options: RestartWithUnselectedSongsOptions = {}): PickerState {
   const pickedKeys = new Set(state.liked.map(getSongKey));
   const unselectedDeck = state.deck.filter((song) => !pickedKeys.has(getSongKey(song)));
+  const orderMode = options.orderMode ?? 'random';
+  const deck = orderMode === 'random' ? shuffleSongs(unselectedDeck, options.seed ?? `${Date.now()}-${unselectedDeck.length}`) : unselectedDeck;
 
   return {
     ...state,
-    deck: unselectedDeck,
+    deck,
     currentIndex: 0,
+    orderMode,
     skipped: [],
     updatedAt: new Date().toISOString()
   };

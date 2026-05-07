@@ -301,7 +301,7 @@ export function PickerExperience() {
                 <CompletePanel
                   state={safeState}
                   onSelection={() => setViewMode('selection')}
-                  onReswipe={() => setState((current) => (current ? restartWithUnselectedSongs(current) : current))}
+                  onReswipe={() => setState((current) => (current ? restartWithUnselectedSongs(current, {orderMode: 'random', seed: `${Date.now()}-${current.deck.length}-${current.liked.length}`}) : current))}
                 />
               )}
             </AnimatePresence>
