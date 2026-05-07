@@ -42,3 +42,12 @@ Returns normalized songs:
 ## Design direction
 
 The landing page uses the Resend and Framer dark design-system cues from `VoltAgent/awesome-design-md`: near-black canvas, lifted dark surfaces, hairline borders, atmospheric glow, pill controls, and mobile-first dense input cards.
+
+## Auth and per-user persistence
+
+Login uses Supabase Auth magic links at `/en/login` and `/zh/login`. Guest mode still works without Supabase environment variables.
+
+To enable per-user saved picker sessions, run the SQL migration in `supabase/migrations/001_auth_song_sessions.sql` in your Supabase project, then configure these Vercel environment variables:
+
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`

@@ -1,29 +1,34 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-label="KTV-Picker logo">
   <defs>
-    <radialGradient id="glow" cx="32%" cy="22%" r="82%">
-      <stop offset="0" stop-color="#55e6ff" stop-opacity="0.95"/>
-      <stop offset="0.38" stop-color="#ff3d8b" stop-opacity="0.85"/>
+    <radialGradient id="bg" cx="34%" cy="24%" r="86%">
+      <stop offset="0" stop-color="#232336"/>
+      <stop offset="0.52" stop-color="#111118"/>
       <stop offset="1" stop-color="#050507"/>
     </radialGradient>
-    <linearGradient id="stroke" x1="184" y1="116" x2="840" y2="908" gradientUnits="userSpaceOnUse">
-      <stop stop-color="#ffffff"/>
-      <stop offset="0.55" stop-color="#f6d9ff"/>
-      <stop offset="1" stop-color="#55e6ff"/>
+    <linearGradient id="ring" x1="242" y1="196" x2="792" y2="822" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#55e6ff"/>
+      <stop offset="0.48" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#ff3d8b"/>
     </linearGradient>
-    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
-      <feDropShadow dx="0" dy="26" stdDeviation="28" flood-color="#000000" flood-opacity="0.55"/>
-      <feDropShadow dx="0" dy="0" stdDeviation="24" flood-color="#ff3d8b" flood-opacity="0.35"/>
+    <linearGradient id="mic" x1="372" y1="258" x2="646" y2="780" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#c8fbff"/>
+    </linearGradient>
+    <filter id="soft" x="-24%" y="-24%" width="148%" height="148%">
+      <feDropShadow dx="0" dy="18" stdDeviation="22" flood-color="#000000" flood-opacity="0.58"/>
+      <feDropShadow dx="0" dy="0" stdDeviation="18" flood-color="#55e6ff" flood-opacity="0.18"/>
     </filter>
   </defs>
-  <rect width="1024" height="1024" rx="232" fill="#050507"/>
-  <rect x="44" y="44" width="936" height="936" rx="206" fill="url(#glow)" opacity="0.72"/>
-  <path d="M174 751c122 80 244 108 365 83 122-25 226-98 313-218" fill="none" stroke="#ffffff" stroke-width="34" stroke-linecap="round" opacity="0.18"/>
-  <g filter="url(#shadow)">
-    <path d="M332 252v302c-25-13-58-16-91-6-55 17-90 61-78 99 12 38 66 55 121 39 45-14 77-46 80-79h1V374l264-54v174c-25-13-58-16-91-6-55 17-90 61-78 99 12 38 66 55 121 39 48-15 81-51 80-86h1V220L332 252Z" fill="url(#stroke)"/>
-    <path d="M342 713c-6 0-12-2-16-7L212 588c-8-9-8-23 1-31l39-37c9-8 22-8 31 1l59 61 160-174c8-9 22-10 31-2l42 38c9 9 10 23 1 32L358 706c-4 5-10 7-16 7Z" fill="#050507" opacity="0.9"/>
-    <path d="M342 690 231 576l36-34 76 79 176-191 38 35-215 225Z" fill="#55e6ff"/>
+  <rect width="1024" height="1024" rx="232" fill="url(#bg)"/>
+  <circle cx="512" cy="512" r="310" fill="none" stroke="url(#ring)" stroke-width="54" opacity="0.96"/>
+  <circle cx="512" cy="512" r="218" fill="#050507" opacity="0.92"/>
+  <g filter="url(#soft)">
+    <rect x="396" y="240" width="232" height="380" rx="116" fill="url(#mic)"/>
+    <rect x="444" y="296" width="136" height="214" rx="68" fill="#0b0b10" opacity="0.92"/>
+    <path d="M338 472c0 96 78 174 174 174s174-78 174-174" fill="none" stroke="#55e6ff" stroke-width="44" stroke-linecap="round"/>
+    <path d="M512 646v92" stroke="#ffffff" stroke-width="44" stroke-linecap="round"/>
+    <path d="M420 782h184" stroke="#ffffff" stroke-width="44" stroke-linecap="round"/>
+    <path d="M658 334c62 34 102 98 102 170" fill="none" stroke="#ff3d8b" stroke-width="34" stroke-linecap="round"/>
+    <path d="M694 258c88 58 144 152 144 258" fill="none" stroke="#ff3d8b" stroke-width="26" stroke-linecap="round" opacity="0.72"/>
   </g>
-  <circle cx="742" cy="258" r="46" fill="#ffffff" opacity="0.92"/>
-  <circle cx="806" cy="346" r="18" fill="#55e6ff"/>
-  <circle cx="218" cy="271" r="16" fill="#ffb1d3"/>
 </svg>

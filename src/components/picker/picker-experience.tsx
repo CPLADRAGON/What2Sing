@@ -1,23 +1,40 @@
 'use client';
 
-import {AnimatePresence, motion} from 'framer-motion';
+import {AnimatePresence, motion, useMotionValue, useTransform, type PanInfo} from 'framer-motion';
 import {useLocale, useTranslations} from 'next-intl';
 import Link from 'next/link';
+import {useRouter} from 'next/navigation';
 import {useEffect, useMemo, useState} from 'react';
+import {savePickerStateForCurrentUser} from '@/lib/picker/persistence';
 import {
+  canEnterSelectionMode,
   chooseCurrentSong,
   createPickerState,
-  deserializeImportedSongs,
+  deserializePickerState,
   getCurrentSong,
   isPickerComplete,
   PICKER_STORAGE_KEY,
+  removeLikedSong,
+  serializePickerState,
+  type PickerDecision,
+  type PickerOrderMode,
   type PickerState
 } from '@/lib/picker/session';
 
 export function PickerExperience() {
   const t = useTranslations('picker');
   const locale = useLocale();
+  const router = useRouter();
+  const x = useMotionValue(0);
+  const rotate = useTransform(x, [-180, 0, 180], [-10, 0, 10]);
+  const scale = useTransform(x, [-180, 0, 180], [1.02, 1, 1.02]);
+  const likeOpacity = useTransform(x, [24, 120], [0, 1]);
+  const skipOpacity = useTransform(x, [-120, -24], [1, 0]);
   const [state, setState] = useState<PickerState | null>(null);
+  const [needsOrderChoice, setNeedsOrderChoice] = useState(true);
+  const [viewMode, setViewMode] = useState<'swipe' | 'selection'>('swipe');
+  const [swipeDirection, setSwipeDirection] = useState<1 | -1 | 0>(0);
+  const [saveMessage, setSaveMessage] = useState('');
   const loaded = state !== null;
   const safeState = state ?? createPickerState([]);
   const currentSong = getCurrentSong(safeState);
@@ -26,17 +43,64 @@ export function PickerExperience() {
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      const storedSongs = deserializeImportedSongs(window.localStorage.getItem(PICKER_STORAGE_KEY));
-      setState(createPickerState(storedSongs));
+      const raw = window.localStorage.getItem(PICKER_STORAGE_KEY);
+      const restoredState = deserializePickerState(raw);
+      setState(restoredState ?? createPickerState([]));
+      setNeedsOrderChoice(isRawImportDeck(raw));
     }, 0);
 
     return () => window.clearTimeout(timer);
   }, []);
 
+  useEffect(() => {
+    x.set(0);
+  }, [safeState.currentIndex, x]);
+
+  useEffect(() => {
+    if (!state || needsOrderChoice || state.deck.length === 0) {
+      return;
+    }
+
+    window.localStorage.setItem(PICKER_STORAGE_KEY, serializePickerState(state));
+    void savePickerStateForCurrentUser(state);
+  }, [needsOrderChoice, state]);
+
   const nextSongs = useMemo(() => safeState.deck.slice(safeState.currentIndex + 1, safeState.currentIndex + 4), [safeState]);
 
-  function decide(decision: 'like' | 'skip') {
+  function chooseMode(orderMode: PickerOrderMode) {
+    const nextState = createPickerState(safeState.deck, {orderMode, seed: `${Date.now()}-${safeState.deck.length}`});
+    setState(nextState);
+    setNeedsOrderChoice(false);
+    window.localStorage.setItem(PICKER_STORAGE_KEY, serializePickerState(nextState));
+    void savePickerStateForCurrentUser(nextState);
+  }
+
+  function decide(decision: PickerDecision) {
+    setSwipeDirection(decision === 'like' ? 1 : -1);
+    vibrate();
     setState((current) => (current ? chooseCurrentSong(current, decision) : current));
+  }
+
+  function handleDragEnd(_: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) {
+    if (info.offset.x > 88 || info.velocity.x > 620) {
+      decide('like');
+      return;
+    }
+
+    if (info.offset.x < -88 || info.velocity.x < -620) {
+      decide('skip');
+      return;
+    }
+
+    x.set(0);
+  }
+
+  function saveAndExit() {
+    if (state) {
+      window.localStorage.setItem(PICKER_STORAGE_KEY, serializePickerState(state));
+    }
+    setSaveMessage(t('saved'));
+    router.push(`/${locale}`);
   }
 
   if (!loaded) {
@@ -58,107 +122,215 @@ export function PickerExperience() {
     );
   }
 
+  if (needsOrderChoice) {
+    return (
+      <main className="relative grid min-h-screen place-items-center overflow-hidden bg-canvas px-5 text-white">
+        <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(85,230,255,0.18),transparent_28rem),radial-gradient(circle_at_20%_60%,rgba(255,61,139,0.18),transparent_22rem)]" />
+        <section className="relative z-10 w-full max-w-md rounded-[2.25rem] border border-hairline-strong bg-surface-card/90 p-6 shadow-glow backdrop-blur-xl">
+          <p className="text-xs font-bold uppercase tracking-[0.24em] text-karaoke-cyan">{safeState.deck.length} songs</p>
+          <h1 className="mt-3 font-display text-4xl font-black leading-none tracking-[-0.06em]">{t('chooseModeTitle')}</h1>
+          <p className="mt-3 text-sm leading-6 text-body-muted">{t('chooseModeBody')}</p>
+          <div className="mt-6 grid gap-3">
+            <button type="button" onClick={() => chooseMode('ordered')} className="rounded-3xl border border-white/10 bg-white/[0.04] p-5 text-left transition hover:border-karaoke-cyan/50 hover:bg-karaoke-cyan/10">
+              <span className="text-lg font-black text-white">{t('orderedMode')}</span>
+              <span className="mt-1 block text-sm text-body-muted">{t('orderedModeBody')}</span>
+            </button>
+            <button type="button" onClick={() => chooseMode('random')} className="rounded-3xl border border-karaoke/30 bg-karaoke/10 p-5 text-left transition hover:bg-karaoke/20">
+              <span className="text-lg font-black text-white">{t('randomMode')}</span>
+              <span className="mt-1 block text-sm text-body-muted">{t('randomModeBody')}</span>
+            </button>
+          </div>
+        </section>
+      </main>
+    );
+  }
+
   return (
     <main className="relative min-h-screen overflow-hidden bg-canvas px-5 py-5 text-white">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(255,61,139,0.22),transparent_34rem),radial-gradient(circle_at_92%_28%,rgba(85,230,255,0.14),transparent_24rem)]" />
       <nav className="relative z-10 mx-auto flex max-w-md items-center justify-between rounded-full border border-hairline-strong bg-white/[0.035] px-4 py-3 backdrop-blur-xl">
-        <Link href={`/${locale}`} className="text-xs font-semibold text-ink-soft">
-          {t('backToImport')}
-        </Link>
+        <button type="button" onClick={saveAndExit} className="text-xs font-semibold text-ink-soft">
+          {t('saveAndExit')}
+        </button>
         <span className="text-xs font-black uppercase tracking-[0.22em] text-karaoke">{t('title')}</span>
         <span className="text-xs text-body-muted">{safeState.currentIndex}/{safeState.deck.length}</span>
       </nav>
+      {saveMessage ? <p className="relative z-10 mx-auto mt-2 max-w-md text-center text-xs text-karaoke-cyan">{saveMessage}</p> : null}
 
-      <section className="relative z-10 mx-auto flex min-h-[calc(100vh-6rem)] max-w-md flex-col justify-center pb-5 pt-8">
-        <div className="mb-5 h-2 overflow-hidden rounded-full bg-white/10">
-          <motion.div className="h-full rounded-full bg-gradient-to-r from-karaoke to-karaoke-cyan" animate={{width: `${progress}%`}} />
-        </div>
+      {viewMode === 'selection' ? (
+        <SelectionPanel state={safeState} onRemove={(index) => setState((current) => (current ? removeLikedSong(current, index) : current))} onContinue={() => setViewMode('swipe')} />
+      ) : (
+        <section className="relative z-10 mx-auto flex min-h-[calc(100vh-6rem)] max-w-md flex-col justify-center pb-5 pt-8">
+          <div className="mb-5 h-2 overflow-hidden rounded-full bg-white/10">
+            <motion.div className="h-full rounded-full bg-gradient-to-r from-karaoke to-karaoke-cyan" animate={{width: `${progress}%`}} />
+          </div>
 
-        <div className="relative h-[28rem]">
-          {nextSongs.map((song, index) => (
-            <div
-              key={`${song.title}-${song.artist}-stack-${index}`}
-              className="absolute inset-x-4 top-8 rounded-[2rem] border border-hairline-strong bg-surface-card/75 p-6 opacity-60 blur-[0.2px]"
-              style={{transform: `translateY(${(index + 1) * 18}px) scale(${1 - (index + 1) * 0.035})`}}
-            >
-              <p className="truncate text-xl font-black text-white/60">{song.title}</p>
-            </div>
-          ))}
-
-          <AnimatePresence mode="wait">
-            {currentSong && !complete ? (
-              <motion.article
-                key={`${currentSong.title}-${currentSong.artist}-${safeState.currentIndex}`}
-                drag="x"
-                dragConstraints={{left: 0, right: 0}}
-                onDragEnd={(_, info) => {
-                  if (info.offset.x > 90) decide('like');
-                  if (info.offset.x < -90) decide('skip');
-                }}
-                initial={{opacity: 0, y: 32, rotate: -2}}
-                animate={{opacity: 1, y: 0, rotate: 0}}
-                exit={{opacity: 0, y: -28, scale: 0.94}}
-                className="absolute inset-0 flex touch-pan-y flex-col justify-between rounded-[2.25rem] border border-hairline-strong bg-[linear-gradient(145deg,rgba(255,255,255,0.12),rgba(255,255,255,0.035))] p-7 shadow-glow backdrop-blur-xl"
+          <div className="relative h-[28rem]">
+            {nextSongs.map((song, index) => (
+              <div
+                key={`${song.title}-${song.artist}-stack-${index}`}
+                className="absolute inset-x-4 top-8 rounded-[2rem] border border-hairline-strong bg-surface-card/75 p-6 opacity-60 blur-[0.2px]"
+                style={{transform: `translateY(${(index + 1) * 18}px) scale(${1 - (index + 1) * 0.035})`}}
               >
-                <div>
-                  <div className="mb-5 flex items-center justify-between">
-                    <span className="rounded-full bg-white/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-ink-soft">
-                      {currentSong.platform}
-                    </span>
-                    <span className="text-xs text-body-muted">#{safeState.currentIndex + 1}</span>
-                  </div>
-                  <h1 className="font-display text-5xl font-black leading-[0.94] tracking-[-0.07em] text-white">{currentSong.title}</h1>
-                  <p className="mt-4 text-lg font-semibold text-karaoke-cyan">{currentSong.artist}</p>
-                </div>
+                <p className="truncate text-xl font-black text-white/60">{song.title}</p>
+              </div>
+            ))}
 
-                <div className="rounded-[1.5rem] border border-white/10 bg-black/25 p-4">
-                  <p className="text-xs leading-5 text-body-muted">{t('gestureHint')}</p>
-                </div>
-              </motion.article>
-            ) : (
-              <motion.div
-                key="complete"
-                initial={{opacity: 0, scale: 0.96}}
-                animate={{opacity: 1, scale: 1}}
-                className="absolute inset-0 flex flex-col justify-between rounded-[2.25rem] border border-hairline-strong bg-surface-card p-7 shadow-cyan"
-              >
-                <div>
-                  <p className="text-xs font-bold uppercase tracking-[0.24em] text-karaoke-cyan">{t('completeEyebrow')}</p>
-                  <h1 className="mt-3 font-display text-4xl font-black tracking-[-0.06em]">{t('completeTitle')}</h1>
-                  <p className="mt-3 text-sm leading-6 text-body-muted">{t('completeBody', {count: safeState.liked.length})}</p>
-                </div>
-                <div className="space-y-2 overflow-y-auto">
-                  {safeState.liked.map((song, index) => (
-                    <div key={`${song.title}-${index}`} className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
-                      <p className="text-sm font-bold">{song.title}</p>
-                      <p className="text-xs text-body-muted">{song.artist}</p>
+            <AnimatePresence mode="wait" custom={swipeDirection}>
+              {currentSong && !complete ? (
+                <motion.article
+                  key={`${currentSong.title}-${currentSong.artist}-${safeState.currentIndex}`}
+                  custom={swipeDirection}
+                  drag="x"
+                  dragConstraints={{left: 0, right: 0}}
+                  dragElastic={0.22}
+                  onDragEnd={handleDragEnd}
+                  style={{x, rotate, scale}}
+                  initial={{opacity: 0, y: 32, rotate: -2}}
+                  animate={{opacity: 1, y: 0, rotate: 0}}
+                  exit={{opacity: 0, x: swipeDirection * 420, rotate: swipeDirection * 16, scale: 0.92}}
+                  transition={{type: 'spring', stiffness: 280, damping: 28}}
+                  className="absolute inset-0 flex touch-pan-y cursor-grab flex-col justify-between rounded-[2.25rem] border border-hairline-strong bg-[linear-gradient(145deg,rgba(255,255,255,0.13),rgba(255,255,255,0.035))] p-7 shadow-glow backdrop-blur-xl active:cursor-grabbing"
+                >
+                  <motion.div style={{opacity: skipOpacity}} className="pointer-events-none absolute left-6 top-20 rotate-[-10deg] rounded-2xl border-2 border-karaoke px-4 py-2 text-lg font-black uppercase tracking-[0.18em] text-karaoke">
+                    {t('skipBadge')}
+                  </motion.div>
+                  <motion.div style={{opacity: likeOpacity}} className="pointer-events-none absolute right-6 top-20 rotate-[10deg] rounded-2xl border-2 border-karaoke-cyan px-4 py-2 text-lg font-black uppercase tracking-[0.18em] text-karaoke-cyan">
+                    {t('likeBadge')}
+                  </motion.div>
+
+                  <div>
+                    <div className="mb-5 flex items-center justify-between">
+                      <span className="rounded-full bg-white/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-ink-soft">
+                        {currentSong.platform} · {safeState.orderMode}
+                      </span>
+                      <span className="text-xs text-body-muted">#{safeState.currentIndex + 1}</span>
                     </div>
-                  ))}
-                </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
+                    <h1 className="font-display text-5xl font-black leading-[0.94] tracking-[-0.07em] text-white">{currentSong.title}</h1>
+                    <p className="mt-4 text-lg font-semibold text-karaoke-cyan">{currentSong.artist}</p>
+                  </div>
 
-        <div className="mt-6 grid grid-cols-2 gap-3">
+                  <div className="rounded-[1.5rem] border border-white/10 bg-black/25 p-4">
+                    <p className="text-xs leading-5 text-body-muted">{t('gestureHint')}</p>
+                  </div>
+                </motion.article>
+              ) : (
+                <CompletePanel state={safeState} onSelection={() => setViewMode('selection')} />
+              )}
+            </AnimatePresence>
+          </div>
+
+          <div className="mt-6 grid grid-cols-2 gap-3">
+            <button
+              type="button"
+              onClick={() => decide('skip')}
+              disabled={!currentSong}
+              className="h-14 rounded-2xl border border-white/10 bg-white/[0.04] text-sm font-black text-ink-soft transition hover:bg-white/10 disabled:opacity-40"
+            >
+              {t('skip')}
+            </button>
+            <button
+              type="button"
+              onClick={() => decide('like')}
+              disabled={!currentSong}
+              className="h-14 rounded-2xl bg-white text-sm font-black text-canvas transition hover:scale-[1.01] disabled:opacity-40"
+            >
+              {t('pick')}
+            </button>
+          </div>
           <button
             type="button"
-            onClick={() => decide('skip')}
-            disabled={!currentSong}
-            className="h-14 rounded-2xl border border-white/10 bg-white/[0.04] text-sm font-black text-ink-soft transition hover:bg-white/10 disabled:opacity-40"
+            onClick={() => setViewMode(canEnterSelectionMode(safeState) ? 'selection' : 'swipe')}
+            disabled={!canEnterSelectionMode(safeState)}
+            className="mt-3 h-12 rounded-2xl border border-karaoke-cyan/25 bg-karaoke-cyan/10 text-sm font-black text-karaoke-cyan transition hover:bg-karaoke-cyan/20 disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-body-muted"
           >
-            {t('skip')}
+            {canEnterSelectionMode(safeState) ? t('viewPicks') : t('selectionLocked')}
           </button>
-          <button
-            type="button"
-            onClick={() => decide('like')}
-            disabled={!currentSong}
-            className="h-14 rounded-2xl bg-white text-sm font-black text-canvas transition hover:scale-[1.01] disabled:opacity-40"
-          >
-            {t('pick')}
-          </button>
-        </div>
-      </section>
+        </section>
+      )}
     </main>
   );
+}
+
+function SelectionPanel({state, onRemove, onContinue}: {state: PickerState; onRemove: (index: number) => void; onContinue: () => void}) {
+  const t = useTranslations('picker');
+
+  return (
+    <section className="relative z-10 mx-auto flex min-h-[calc(100vh-6rem)] max-w-md flex-col py-8">
+      <div className="rounded-[2rem] border border-hairline-strong bg-surface-card/90 p-6 shadow-cyan backdrop-blur-xl">
+        <p className="text-xs font-bold uppercase tracking-[0.24em] text-karaoke-cyan">{state.liked.length} songs</p>
+        <h1 className="mt-3 font-display text-4xl font-black tracking-[-0.06em]">{t('selectionTitle')}</h1>
+        <p className="mt-3 text-sm leading-6 text-body-muted">{t('selectionBody')}</p>
+        <div className="mt-5 max-h-[52vh] space-y-2 overflow-y-auto pr-1">
+          {state.liked.map((song, index) => (
+            <div key={`${song.title}-${song.artist}-${index}`} className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
+              <div>
+                <p className="text-sm font-bold">{song.title}</p>
+                <p className="text-xs text-body-muted">{song.artist}</p>
+              </div>
+              <button type="button" onClick={() => onRemove(index)} className="rounded-full border border-white/10 px-3 py-1 text-xs text-ink-soft">
+                {t('remove')}
+              </button>
+            </div>
+          ))}
+        </div>
+        <div className="mt-5 grid grid-cols-2 gap-3">
+          <button type="button" onClick={onContinue} className="h-12 rounded-2xl border border-white/10 bg-white/[0.04] text-sm font-black text-ink-soft">
+            {t('continueSwiping')}
+          </button>
+          <button type="button" className="h-12 rounded-2xl bg-white text-sm font-black text-canvas">
+            {t('finishQueue')}
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function CompletePanel({state, onSelection}: {state: PickerState; onSelection: () => void}) {
+  const t = useTranslations('picker');
+
+  return (
+    <motion.div
+      key="complete"
+      initial={{opacity: 0, scale: 0.96}}
+      animate={{opacity: 1, scale: 1}}
+      className="absolute inset-0 flex flex-col justify-between rounded-[2.25rem] border border-hairline-strong bg-surface-card p-7 shadow-cyan"
+    >
+      <div>
+        <p className="text-xs font-bold uppercase tracking-[0.24em] text-karaoke-cyan">{t('completeEyebrow')}</p>
+        <h1 className="mt-3 font-display text-4xl font-black tracking-[-0.06em]">{t('completeTitle')}</h1>
+        <p className="mt-3 text-sm leading-6 text-body-muted">{t('completeBody', {count: state.liked.length})}</p>
+      </div>
+      <div className="space-y-2 overflow-y-auto">
+        {state.liked.map((song, index) => (
+          <div key={`${song.title}-${index}`} className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
+            <p className="text-sm font-bold">{song.title}</p>
+            <p className="text-xs text-body-muted">{song.artist}</p>
+          </div>
+        ))}
+      </div>
+      <button type="button" onClick={onSelection} className="mt-4 h-12 rounded-2xl bg-white text-sm font-black text-canvas">
+        {t('viewPicks')}
+      </button>
+    </motion.div>
+  );
+}
+
+function isRawImportDeck(value: string | null): boolean {
+  if (!value) {
+    return false;
+  }
+
+  try {
+    return Array.isArray(JSON.parse(value) as unknown);
+  } catch {
+    return false;
+  }
+}
+
+function vibrate() {
+  if ('vibrate' in navigator) {
+    navigator.vibrate(10);
+  }
 }

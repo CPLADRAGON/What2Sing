@@ -1,10 +1,22 @@
 import {describe, expect, it} from 'vitest';
-import {chooseCurrentSong, createPickerState, deserializeImportedSongs, getCurrentSong, isPickerComplete, serializeImportedSongs} from '@/lib/picker/session';
+import {
+  canEnterSelectionMode,
+  chooseCurrentSong,
+  createPickerState,
+  deserializeImportedSongs,
+  deserializePickerState,
+  getCurrentSong,
+  isPickerComplete,
+  removeLikedSong,
+  serializeImportedSongs,
+  serializePickerState
+} from '@/lib/picker/session';
 import type {ImportedSong} from '@/lib/importers/qq';
 
 const songs: ImportedSong[] = [
   {title: '稻香', artist: '周杰伦', platform: 'qq', tags: []},
-  {title: '小幸运', artist: '田馥甄', platform: 'qq', tags: []}
+  {title: '小幸运', artist: '田馥甄', platform: 'qq', tags: []},
+  {title: '后来', artist: '刘若英', platform: 'manual', tags: []}
 ];
 
 describe('picker session', () => {
@@ -12,6 +24,7 @@ describe('picker session', () => {
     const state = createPickerState(songs);
 
     expect(state.deck).toEqual(songs);
+    expect(state.orderMode).toBe('ordered');
     expect(state.currentIndex).toBe(0);
     expect(state.liked).toEqual([]);
     expect(state.skipped).toEqual([]);
@@ -30,16 +43,52 @@ describe('picker session', () => {
   it('skips the current song and completes after the final decision', () => {
     const first = chooseCurrentSong(createPickerState(songs), 'skip');
     const second = chooseCurrentSong(first, 'like');
+    const third = chooseCurrentSong(second, 'skip');
 
-    expect(second.skipped).toEqual([songs[0]]);
-    expect(second.liked).toEqual([songs[1]]);
-    expect(getCurrentSong(second)).toBeNull();
-    expect(isPickerComplete(second)).toBe(true);
+    expect(third.skipped).toEqual([songs[0], songs[2]]);
+    expect(third.liked).toEqual([songs[1]]);
+    expect(getCurrentSong(third)).toBeNull();
+    expect(isPickerComplete(third)).toBe(true);
   });
 
   it('round trips imported songs through safe storage serialization', () => {
     expect(deserializeImportedSongs(serializeImportedSongs(songs))).toEqual(songs);
     expect(deserializeImportedSongs('{broken')).toEqual([]);
     expect(deserializeImportedSongs('[{"title":"bad"}]')).toEqual([]);
+  });
+
+  it('keeps import order in ordered mode', () => {
+    const state = createPickerState(songs, {orderMode: 'ordered'});
+
+    expect(state.deck.map((song) => song.title)).toEqual(['稻香', '小幸运', '后来']);
+    expect(state.orderMode).toBe('ordered');
+  });
+
+  it('shuffles songs in random mode without losing songs', () => {
+    const state = createPickerState(songs, {orderMode: 'random', seed: 'ktv-night'});
+
+    expect(state.deck).toHaveLength(songs.length);
+    expect(state.deck).not.toEqual(songs);
+    expect([...state.deck].sort((a, b) => a.title.localeCompare(b.title))).toEqual([...songs].sort((a, b) => a.title.localeCompare(b.title)));
+    expect(state.orderMode).toBe('random');
+  });
+
+  it('round trips full picker progress through storage serialization', () => {
+    const state = chooseCurrentSong(chooseCurrentSong(createPickerState(songs, {orderMode: 'random', seed: 'ktv-night'}), 'like'), 'skip');
+
+    expect(deserializePickerState(serializePickerState(state))).toEqual(state);
+    expect(deserializePickerState('{broken')).toBeNull();
+    expect(deserializePickerState('[{"title":"bad"}]')).toBeNull();
+  });
+
+  it('allows selection mode only after at least one song is liked and can remove picked songs', () => {
+    const empty = createPickerState(songs);
+    const liked = chooseCurrentSong(empty, 'like');
+    const removed = removeLikedSong(liked, 0);
+
+    expect(canEnterSelectionMode(empty)).toBe(false);
+    expect(canEnterSelectionMode(liked)).toBe(true);
+    expect(removed.liked).toEqual([]);
+    expect(canEnterSelectionMode(removed)).toBe(false);
   });
 });

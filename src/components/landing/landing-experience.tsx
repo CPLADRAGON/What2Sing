@@ -4,10 +4,11 @@ import {motion} from 'framer-motion';
 import {useLocale, useTranslations} from 'next-intl';
 import Link from 'next/link';
 import {useRouter} from 'next/navigation';
-import {useMemo, useState} from 'react';
+import {useEffect, useMemo, useState} from 'react';
 import {normalizeSongs} from '@/lib/importers/manual';
 import type {ImportedSong} from '@/lib/importers/qq';
-import {PICKER_STORAGE_KEY, serializeImportedSongs} from '@/lib/picker/session';
+import {saveImportedDeckForCurrentUser} from '@/lib/picker/persistence';
+import {deserializePickerState, PICKER_STORAGE_KEY, serializeImportedSongs} from '@/lib/picker/session';
 
 const sampleSongs = '青花瓷 - 周杰伦\n后来 - 刘若英\n修炼爱情 - 林俊杰\n倔强 - 五月天';
 
@@ -21,12 +22,23 @@ export function LandingExperience() {
   const [songs, setSongs] = useState<ImportedSong[]>([]);
   const [status, setStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
   const [message, setMessage] = useState('');
+  const [hasSavedProgress, setHasSavedProgress] = useState(false);
   const steps = t.raw('steps') as string[];
+  const loadingSteps = t.raw('loadingSteps') as string[];
 
   const previewSongs = useMemo(
     () => (songs.length ? songs : normalizeSongs(sampleSongs)).slice(0, 4),
     [songs]
   );
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      const savedState = deserializePickerState(window.localStorage.getItem(PICKER_STORAGE_KEY));
+      setHasSavedProgress(Boolean(savedState && (savedState.currentIndex > 0 || savedState.liked.length > 0 || savedState.skipped.length > 0)));
+    }, 0);
+
+    return () => window.clearTimeout(timer);
+  }, []);
 
   async function handleImport() {
     setMessage('');
@@ -43,30 +55,39 @@ export function LandingExperience() {
 
     try {
       let importedSongs: ImportedSong[] = [];
+      const controller = new AbortController();
+      const timeout = window.setTimeout(() => controller.abort(), 20000);
 
       if (url.trim()) {
-        const response = await fetch('/api/import/qq', {
-          method: 'POST',
-          headers: {'content-type': 'application/json'},
-          body: JSON.stringify({url})
-        });
-        const payload = (await response.json()) as {songs?: ImportedSong[]; error?: string};
+        try {
+          const response = await fetch('/api/import/qq', {
+            method: 'POST',
+            headers: {'content-type': 'application/json'},
+            body: JSON.stringify({url}),
+            signal: controller.signal
+          });
+          const payload = (await response.json()) as {songs?: ImportedSong[]; error?: string};
 
-        if (!response.ok) {
-          throw new Error(payload.error ?? 'Import failed');
+          if (!response.ok) {
+            throw new Error(payload.error ?? 'Import failed');
+          }
+
+          importedSongs = payload.songs ?? [];
+        } finally {
+          window.clearTimeout(timeout);
         }
-
-        importedSongs = payload.songs ?? [];
       }
 
       const nextSongs = [...importedSongs, ...manualSongs];
       window.localStorage.setItem(PICKER_STORAGE_KEY, serializeImportedSongs(nextSongs));
+      void saveImportedDeckForCurrentUser(nextSongs);
       setSongs(nextSongs);
       setStatus('done');
       setMessage(t('imported', {count: nextSongs.length}));
+      setHasSavedProgress(false);
     } catch (error) {
       setStatus('error');
-      setMessage(error instanceof Error ? error.message : 'Import failed');
+      setMessage(error instanceof DOMException && error.name === 'AbortError' ? t('timeoutError') : error instanceof Error ? error.message : 'Import failed');
     }
   }
 
@@ -83,6 +104,9 @@ export function LandingExperience() {
         </Link>
         <Link href={`/${nextLocale}`} className="rounded-full border border-hairline-strong px-3 py-1.5 text-xs text-ink-soft transition hover:border-white/30 hover:bg-white/10">
           {t('language')}
+        </Link>
+        <Link href={`/${locale}/login`} className="hidden rounded-full border border-hairline-strong px-3 py-1.5 text-xs text-ink-soft transition hover:border-white/30 hover:bg-white/10 sm:inline-flex">
+          {t('login')}
         </Link>
       </nav>
 
@@ -106,6 +130,14 @@ export function LandingExperience() {
               </div>
             ))}
           </div>
+          {hasSavedProgress ? (
+            <div className="mt-5 rounded-3xl border border-karaoke-cyan/25 bg-karaoke-cyan/10 p-4 sm:max-w-lg">
+              <p className="text-sm text-ink-soft">{t('savedProgress')}</p>
+              <button type="button" onClick={() => router.push(`/${locale}/pick`)} className="mt-3 h-11 rounded-2xl bg-karaoke-cyan px-5 text-sm font-black text-canvas">
+                {t('resumePicking')}
+              </button>
+            </div>
+          ) : null}
         </motion.div>
 
         <motion.div
@@ -122,6 +154,7 @@ export function LandingExperience() {
               id="qq-url"
               value={url}
               onChange={(event) => setUrl(event.target.value)}
+              disabled={status === 'loading'}
               placeholder={t('urlPlaceholder')}
               className="mt-2 h-12 w-full rounded-2xl border border-hairline-strong bg-black/35 px-4 text-sm text-white outline-none transition placeholder:text-body-muted focus:border-karaoke/70 focus:shadow-[0_0_0_4px_rgba(255,61,139,0.12)]"
             />
@@ -133,6 +166,7 @@ export function LandingExperience() {
               id="song-text"
               value={text}
               onChange={(event) => setText(event.target.value)}
+              disabled={status === 'loading'}
               placeholder={t('textPlaceholder')}
               rows={6}
               className="mt-2 w-full resize-none rounded-2xl border border-hairline-strong bg-black/35 px-4 py-3 text-sm leading-6 text-white outline-none transition placeholder:text-body-muted focus:border-karaoke-cyan/70 focus:shadow-[0_0_0_4px_rgba(85,230,255,0.10)]"
@@ -145,11 +179,12 @@ export function LandingExperience() {
                 disabled={status === 'loading'}
                 className="h-12 rounded-2xl bg-white px-5 text-sm font-black text-canvas transition hover:scale-[1.01] hover:bg-ink-soft disabled:cursor-wait disabled:opacity-70"
               >
-                {status === 'loading' ? '...' : t('importButton')}
+                {status === 'loading' ? t('importing') : t('importButton')}
               </button>
               <button
                 type="button"
                 onClick={() => setText(sampleSongs)}
+                disabled={status === 'loading'}
                 className="h-12 rounded-2xl border border-hairline-strong px-5 text-sm font-semibold text-ink-soft transition hover:border-white/25 hover:bg-white/10"
               >
                 {t('sampleButton')}
@@ -171,6 +206,7 @@ export function LandingExperience() {
                 </button>
               </div>
             ) : null}
+            {status === 'loading' ? <ImportLoadingPanel loadingSteps={loadingSteps} title={t('loadingTitle')} body={t('loadingBody')} /> : null}
           </div>
 
           <div className="mt-4 rounded-[1.5rem] border border-hairline-strong bg-black/30 p-4">
@@ -183,7 +219,12 @@ export function LandingExperience() {
               </div>
             </div>
             <div className="space-y-2">
-              {previewSongs.map((song, index) => (
+              {status === 'loading' ? [0, 1, 2, 3].map((index) => (
+                <div key={index} className="animate-pulse rounded-2xl border border-white/8 bg-white/[0.035] px-3 py-3">
+                  <div className="h-4 w-2/3 rounded-full bg-white/10" />
+                  <div className="mt-2 h-3 w-1/3 rounded-full bg-white/5" />
+                </div>
+              )) : previewSongs.map((song, index) => (
                 <div key={`${song.title}-${song.artist}-${index}`} className="flex items-center justify-between rounded-2xl border border-white/8 bg-white/[0.035] px-3 py-3">
                   <div>
                     <p className="text-sm font-bold text-white">{song.title}</p>
@@ -207,5 +248,29 @@ export function LandingExperience() {
         ))}
       </section>
     </main>
+  );
+}
+
+function ImportLoadingPanel({loadingSteps, title, body}: {loadingSteps: string[]; title: string; body: string}) {
+  return (
+    <div className="mt-4 overflow-hidden rounded-2xl border border-karaoke/20 bg-karaoke/10 p-4">
+      <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+        <motion.div
+          className="h-full w-1/2 rounded-full bg-gradient-to-r from-karaoke to-karaoke-cyan"
+          animate={{x: ['-100%', '220%']}}
+          transition={{duration: 1.45, repeat: Infinity, ease: 'easeInOut'}}
+        />
+      </div>
+      <p className="mt-3 text-sm font-black text-white">{title}</p>
+      <p className="mt-1 text-xs leading-5 text-body-muted">{body}</p>
+      <div className="mt-3 grid gap-2">
+        {loadingSteps.map((step, index) => (
+          <div key={step} className="flex items-center gap-2 text-xs text-ink-soft">
+            <span className="h-1.5 w-1.5 rounded-full bg-karaoke-cyan" style={{opacity: 1 - index * 0.2}} />
+            {step}
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
