@@ -97,17 +97,19 @@ export function LandingExperience() {
       <div className="pointer-events-none absolute -left-24 top-16 h-72 w-72 rounded-full bg-karaoke/20 blur-3xl" />
       <div className="pointer-events-none absolute -right-28 top-44 h-80 w-80 rounded-full bg-karaoke-cyan/10 blur-3xl" />
 
-      <nav className="relative z-10 mx-auto flex max-w-6xl items-center justify-between rounded-full border border-hairline-strong bg-white/[0.03] px-4 py-3 backdrop-blur-xl">
-        <Link href={`/${locale}`} className="flex items-center gap-2 font-display text-sm font-black tracking-tight">
+      <nav className="relative z-10 mx-auto flex max-w-6xl items-center justify-between gap-2 rounded-full border border-hairline-strong bg-white/[0.03] px-3 py-3 backdrop-blur-xl sm:px-4">
+        <Link href={`/${locale}`} className="flex min-w-0 items-center gap-2 font-display text-sm font-black tracking-tight">
           <span className="grid h-8 w-8 place-items-center rounded-full bg-white text-canvas">唱</span>
-          KTV-Picker
+          <span className="hidden xs:inline sm:inline">KTV-Picker</span>
         </Link>
-        <Link href={`/${nextLocale}`} className="rounded-full border border-hairline-strong px-3 py-1.5 text-xs text-ink-soft transition hover:border-white/30 hover:bg-white/10">
+        <div className="flex items-center gap-2">
+        <Link href={`/${nextLocale}`} className="rounded-full border border-hairline-strong px-2.5 py-1.5 text-xs text-ink-soft transition hover:border-white/30 hover:bg-white/10 sm:px-3">
           {t('language')}
         </Link>
-        <Link href={`/${locale}/login`} className="hidden rounded-full border border-hairline-strong px-3 py-1.5 text-xs text-ink-soft transition hover:border-white/30 hover:bg-white/10 sm:inline-flex">
+        <Link href={`/${locale}/login`} className="rounded-full border border-hairline-strong px-2.5 py-1.5 text-xs text-ink-soft transition hover:border-white/30 hover:bg-white/10 sm:px-3">
           {t('login')}
         </Link>
+        </div>
       </nav>
 
       <section className="relative z-10 mx-auto grid max-w-6xl gap-10 pb-12 pt-12 lg:grid-cols-[1.04fr_0.96fr] lg:items-center lg:pb-20 lg:pt-20">
