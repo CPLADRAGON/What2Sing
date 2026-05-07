@@ -51,3 +51,11 @@ To enable per-user saved picker sessions, run the SQL migration in `supabase/mig
 
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `NEXT_PUBLIC_SITE_URL` — production URL used by Supabase magic links, e.g. `https://what2-sing.vercel.app`
+
+In Supabase Auth settings, set the Site URL to your production domain and add these Redirect URLs:
+
+- `https://what2-sing.vercel.app/en/login`
+- `https://what2-sing.vercel.app/zh/login`
+- `http://localhost:3000/en/login`
+- `http://localhost:3000/zh/login`

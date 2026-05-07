@@ -3,6 +3,7 @@
 import {useLocale, useTranslations} from 'next-intl';
 import Link from 'next/link';
 import {useEffect, useState} from 'react';
+import {getAuthRedirectUrl} from '@/lib/auth/redirect';
 import {supabase} from '@/lib/supabase';
 
 export function LoginForm() {
@@ -49,7 +50,7 @@ export function LoginForm() {
     const {error} = await supabase.auth.signInWithOtp({
       email,
       options: {
-        emailRedirectTo: `${window.location.origin}/${locale}`
+        emailRedirectTo: getAuthRedirectUrl(locale, window.location.origin)
       }
     });
 
