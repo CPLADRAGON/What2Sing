@@ -110,7 +110,7 @@
     "sending": "发送中...",
     "codeLabel": "邮箱验证码",
     "codePlaceholder": "123456",
-    "codeHint": "如果你从 iPhone 主屏幕打开应用，请复制邮件里的验证码并回到这里验证。如果邮件没有验证码，请在 Supabase Magic Link 邮件模板加入 {{ .Token }}。",
+    "codeHint": "如果你从 iPhone 主屏幕打开应用，请复制邮件里的验证码并回到这里验证。如果邮件没有验证码，请在 Supabase Magic Link 模板加入 {{ .Token }}。如果日志显示 user_recovery_requested，也要加到 Recovery 模板。",
     "verifyCode": "验证登录",
     "verifying": "验证中...",
     "retryIn": "{seconds} 秒后再试",

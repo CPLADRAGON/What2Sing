@@ -110,7 +110,7 @@
     "sending": "Sending...",
     "codeLabel": "Email code",
     "codePlaceholder": "123456",
-    "codeHint": "On iPhone Home Screen, copy the email code and verify inside the app. If the email has no code, add {{ .Token }} to the Supabase Magic Link email template.",
+    "codeHint": "On iPhone Home Screen, copy the email code and verify inside the app. If the email has no code, add {{ .Token }} to the Supabase Magic Link template. If Supabase logs show user_recovery_requested, add it to Recovery too.",
     "verifyCode": "Verify code",
     "verifying": "Verifying...",
     "retryIn": "Try again in {seconds}s",

@@ -66,7 +66,7 @@ In Supabase Auth settings, set the Site URL to your production domain and add th
 
 iOS opens email magic links in Safari, while a Home Screen web app keeps a separate Supabase session. To log in inside the installed Home Screen app, the auth email must show Supabase's one-time token so the user can copy it back into KTV-Picker.
 
-In Supabase Dashboard, go to **Authentication → Email Templates → Magic Link** and include `{{ .Token }}` in the email body. Example:
+In Supabase Dashboard, go to **Authentication → Email Templates → Magic Link** and include `{{ .Token }}` in the email body. If the Supabase Auth log shows `user_recovery_requested`, also add the same block to **Authentication → Email Templates → Recovery** because that event uses the Recovery template instead of Magic Link. Example:
 
 ```html
 <p>Your KTV-Picker login code is:</p>
