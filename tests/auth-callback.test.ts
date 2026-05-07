@@ -1,4 +1,5 @@
 import {describe, expect, it, vi} from 'vitest';
+import {readFileSync} from 'node:fs';
 import {completeAuthRedirectFromUrl} from '@/lib/auth/callback';
 
 describe('auth callback completion', () => {
@@ -45,5 +46,13 @@ describe('auth callback completion', () => {
     expect(exchangeCodeForSession).not.toHaveBeenCalled();
     expect(setSession).not.toHaveBeenCalled();
     expect(cleanUrl).toBeNull();
+  });
+
+  it('keeps an in-app email code option for iOS Home Screen mode', () => {
+    const source = readFileSync('src/components/auth/login-form.tsx', 'utf8');
+
+    expect(source).toContain('verifyEmailOtpCode');
+    expect(source).toContain('otpCode');
+    expect(source).toContain('verifyCode');
   });
 });

@@ -5,6 +5,7 @@ import Link from 'next/link';
 import {useEffect, useState} from 'react';
 import {completeAuthRedirectFromUrl} from '@/lib/auth/callback';
 import {getMagicLinkCooldownSeconds, MAGIC_LINK_COOLDOWN_SECONDS} from '@/lib/auth/cooldown';
+import {verifyEmailOtpCode} from '@/lib/auth/otp';
 import {getAuthRedirectUrl} from '@/lib/auth/redirect';
 import {supabase} from '@/lib/supabase';
 
@@ -14,7 +15,8 @@ export function LoginForm() {
   const t = useTranslations('auth');
   const locale = useLocale();
   const [email, setEmail] = useState('');
-  const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
+  const [otpCode, setOtpCode] = useState('');
+  const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'verifying' | 'error'>('idle');
   const [message, setMessage] = useState('');
   const [signedInEmail, setSignedInEmail] = useState<string | null>(null);
   const [cooldownSeconds, setCooldownSeconds] = useState(0);
@@ -122,6 +124,29 @@ export function LoginForm() {
     setMessage(t('sent'));
   }
 
+  async function verifyCode() {
+    if (!supabase) {
+      setStatus('error');
+      setMessage(t('unavailable'));
+      return;
+    }
+
+    setStatus('verifying');
+    setMessage('');
+
+    try {
+      await verifyEmailOtpCode(supabase, email.trim(), otpCode);
+      const {data} = await supabase.auth.getSession();
+      setSignedInEmail(data.session?.user.email ?? email.trim());
+      setStatus('idle');
+      setOtpCode('');
+      setMessage(t('verified'));
+    } catch (error) {
+      setStatus('error');
+      setMessage(error instanceof Error ? error.message : t('unavailable'));
+    }
+  }
+
   async function signOut() {
     if (!supabase) {
       return;
@@ -167,6 +192,31 @@ export function LoginForm() {
             >
               {status === 'sending' ? t('sending') : cooldownSeconds > 0 ? t('retryIn', {seconds: cooldownSeconds}) : t('sendLink')}
             </button>
+            {status === 'sent' || status === 'verifying' || otpCode ? (
+              <div className="mt-5 rounded-3xl border border-karaoke-cyan/20 bg-karaoke-cyan/10 p-4">
+                <label htmlFor="otp-code" className="text-sm font-semibold text-ink-soft">
+                  {t('codeLabel')}
+                </label>
+                <input
+                  id="otp-code"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  value={otpCode}
+                  onChange={(event) => setOtpCode(event.target.value)}
+                  placeholder={t('codePlaceholder')}
+                  className="mt-2 h-12 w-full rounded-2xl border border-hairline-strong bg-black/35 px-4 text-center text-lg font-black tracking-[0.35em] text-white outline-none transition placeholder:text-sm placeholder:font-normal placeholder:tracking-normal placeholder:text-body-muted focus:border-karaoke-cyan/70 focus:shadow-[0_0_0_4px_rgba(85,230,255,0.10)]"
+                />
+                <p className="mt-2 text-xs leading-5 text-body-muted">{t('codeHint')}</p>
+                <button
+                  type="button"
+                  onClick={verifyCode}
+                  disabled={!email.trim() || !otpCode.replace(/\s+/g, '') || status === 'verifying'}
+                  className="mt-3 h-11 w-full rounded-2xl bg-karaoke-cyan text-sm font-black text-canvas transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {status === 'verifying' ? t('verifying') : t('verifyCode')}
+                </button>
+              </div>
+            ) : null}
             {message ? <p className={`mt-3 text-sm ${status === 'error' ? 'text-karaoke' : 'text-karaoke-cyan'}`}>{message}</p> : null}
           </div>
         )}
