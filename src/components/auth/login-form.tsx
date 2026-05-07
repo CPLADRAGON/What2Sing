@@ -3,6 +3,7 @@
 import {useLocale, useTranslations} from 'next-intl';
 import Link from 'next/link';
 import {useEffect, useState} from 'react';
+import {completeAuthRedirectFromUrl} from '@/lib/auth/callback';
 import {getAuthRedirectUrl} from '@/lib/auth/redirect';
 import {supabase} from '@/lib/supabase';
 
@@ -16,26 +17,50 @@ export function LoginForm() {
 
   useEffect(() => {
     const client = supabase;
+    let isMounted = true;
 
     if (!client) {
       return;
     }
 
-    const timer = window.setTimeout(() => {
-      void client.auth.getSession().then(({data}) => {
-        setSignedInEmail(data.session?.user.email ?? null);
-      });
-    }, 0);
+    const authClient = client;
 
-    const {data: subscription} = client.auth.onAuthStateChange((_event, session) => {
-      setSignedInEmail(session?.user.email ?? null);
+    async function syncSessionFromRedirect() {
+      try {
+        const cleanUrl = await completeAuthRedirectFromUrl(authClient, window.location.href);
+
+        if (cleanUrl) {
+          window.history.replaceState(window.history.state, document.title, cleanUrl);
+        }
+
+        const {data} = await authClient.auth.getSession();
+
+        if (isMounted) {
+          setSignedInEmail(data.session?.user.email ?? null);
+        }
+      } catch (error) {
+        if (!isMounted) {
+          return;
+        }
+
+        setStatus('error');
+        setMessage(error instanceof Error ? error.message : t('unavailable'));
+      }
+    }
+
+    void syncSessionFromRedirect();
+
+    const {data: subscription} = authClient.auth.onAuthStateChange((_event, session) => {
+      if (isMounted) {
+        setSignedInEmail(session?.user.email ?? null);
+      }
     });
 
     return () => {
-      window.clearTimeout(timer);
+      isMounted = false;
       subscription.subscription.unsubscribe();
     };
-  }, []);
+  }, [t]);
 
   async function sendMagicLink() {
     if (!supabase) {
