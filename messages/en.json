@@ -71,6 +71,7 @@
     "emailPlaceholder": "you@example.com",
     "sendLink": "Send magic link",
     "sending": "Sending...",
+    "retryIn": "Try again in {seconds}s",
     "sent": "Magic link sent. Check your email on this device.",
     "unavailable": "Supabase is not configured yet. Guest mode still works.",
     "signOut": "Sign out",

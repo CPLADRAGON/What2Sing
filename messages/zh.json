@@ -71,6 +71,7 @@
     "emailPlaceholder": "you@example.com",
     "sendLink": "发送魔法链接",
     "sending": "发送中...",
+    "retryIn": "{seconds} 秒后再试",
     "sent": "魔法链接已发送，请在这台设备上查看邮箱。",
     "unavailable": "Supabase 还没有配置。游客模式仍然可用。",
     "signOut": "退出登录",

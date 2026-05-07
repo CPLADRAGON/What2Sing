@@ -4,8 +4,11 @@ import {useLocale, useTranslations} from 'next-intl';
 import Link from 'next/link';
 import {useEffect, useState} from 'react';
 import {completeAuthRedirectFromUrl} from '@/lib/auth/callback';
+import {getMagicLinkCooldownSeconds, MAGIC_LINK_COOLDOWN_SECONDS} from '@/lib/auth/cooldown';
 import {getAuthRedirectUrl} from '@/lib/auth/redirect';
 import {supabase} from '@/lib/supabase';
+
+const MAGIC_LINK_LAST_REQUESTED_KEY = 'ktv-picker:magic-link-requested-at';
 
 export function LoginForm() {
   const t = useTranslations('auth');
@@ -14,6 +17,7 @@ export function LoginForm() {
   const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle');
   const [message, setMessage] = useState('');
   const [signedInEmail, setSignedInEmail] = useState<string | null>(null);
+  const [cooldownSeconds, setCooldownSeconds] = useState(0);
 
   useEffect(() => {
     const client = supabase;
@@ -62,10 +66,28 @@ export function LoginForm() {
     };
   }, [t]);
 
+  useEffect(() => {
+    function refreshCooldown() {
+      const lastRequestedAt = Number(window.localStorage.getItem(MAGIC_LINK_LAST_REQUESTED_KEY));
+      setCooldownSeconds(getMagicLinkCooldownSeconds(Number.isFinite(lastRequestedAt) ? lastRequestedAt : null));
+    }
+
+    refreshCooldown();
+    const interval = window.setInterval(refreshCooldown, 1000);
+
+    return () => window.clearInterval(interval);
+  }, []);
+
   async function sendMagicLink() {
     if (!supabase) {
       setStatus('error');
       setMessage(t('unavailable'));
+      return;
+    }
+
+    if (cooldownSeconds > 0) {
+      setStatus('error');
+      setMessage(t('retryIn', {seconds: cooldownSeconds}));
       return;
     }
 
@@ -81,10 +103,21 @@ export function LoginForm() {
 
     if (error) {
       setStatus('error');
+      const isRateLimited = error.message.toLowerCase().includes('rate limit') || error.message.includes('429');
+
+      if (isRateLimited) {
+        window.localStorage.setItem(MAGIC_LINK_LAST_REQUESTED_KEY, String(Date.now()));
+        setCooldownSeconds(MAGIC_LINK_COOLDOWN_SECONDS);
+        setMessage(t('retryIn', {seconds: MAGIC_LINK_COOLDOWN_SECONDS}));
+        return;
+      }
+
       setMessage(error.message);
       return;
     }
 
+    window.localStorage.setItem(MAGIC_LINK_LAST_REQUESTED_KEY, String(Date.now()));
+    setCooldownSeconds(MAGIC_LINK_COOLDOWN_SECONDS);
     setStatus('sent');
     setMessage(t('sent'));
   }
@@ -129,10 +162,10 @@ export function LoginForm() {
             <button
               type="button"
               onClick={sendMagicLink}
-              disabled={!email.trim() || status === 'sending'}
+              disabled={!email.trim() || status === 'sending' || cooldownSeconds > 0}
               className="mt-4 h-12 w-full rounded-2xl bg-white text-sm font-black text-canvas transition hover:scale-[1.01] disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {status === 'sending' ? t('sending') : t('sendLink')}
+              {status === 'sending' ? t('sending') : cooldownSeconds > 0 ? t('retryIn', {seconds: cooldownSeconds}) : t('sendLink')}
             </button>
             {message ? <p className={`mt-3 text-sm ${status === 'error' ? 'text-karaoke' : 'text-karaoke-cyan'}`}>{message}</p> : null}
           </div>
