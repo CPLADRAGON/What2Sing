@@ -14,6 +14,7 @@ import {chooseSyncedPickerState, deserializePickerState, PICKER_STORAGE_KEY, ser
 import {supabase} from '@/lib/supabase';
 
 const sampleSongs = '青花瓷 - 周杰伦\n后来 - 刘若英\n修炼爱情 - 林俊杰\n倔强 - 五月天';
+type ImportSource = 'qq' | 'spotify' | 'manual';
 
 export function LandingExperience() {
   const t = useTranslations('landing');
@@ -22,6 +23,8 @@ export function LandingExperience() {
   const nextLocale = locale === 'zh' ? 'en' : 'zh';
   const [url, setUrl] = useState('');
   const [text, setText] = useState('');
+  const [activeSource, setActiveSource] = useState<ImportSource>('qq');
+  const [showSourcePicker, setShowSourcePicker] = useState(false);
   const [songs, setSongs] = useState<ImportedSong[]>([]);
   const [status, setStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
   const [message, setMessage] = useState('');
@@ -88,12 +91,21 @@ export function LandingExperience() {
     setRandomSong(pickRandomSong(savedLikedSongs, `${Date.now()}-${savedLikedSongs.length}`));
   }
 
+  async function signOut() {
+    if (!supabase) {
+      return;
+    }
+
+    await supabase.auth.signOut();
+    setDisplayName(null);
+  }
+
   async function handleImport() {
     setMessage('');
 
     const manualSongs = normalizeSongs(text);
 
-    if (!url.trim() && manualSongs.length === 0) {
+    if ((activeSource === 'manual' && manualSongs.length === 0) || (activeSource !== 'manual' && !url.trim() && manualSongs.length === 0)) {
       setStatus('error');
       setMessage(t('emptyHint'));
       return;
@@ -106,9 +118,9 @@ export function LandingExperience() {
       const controller = new AbortController();
       const timeout = window.setTimeout(() => controller.abort(), 20000);
 
-      if (url.trim()) {
+      if (activeSource !== 'manual' && url.trim()) {
         try {
-          const response = await fetch('/api/import/qq', {
+          const response = await fetch(`/api/import/${activeSource}`, {
             method: 'POST',
             headers: {'content-type': 'application/json'},
             body: JSON.stringify({url}),
@@ -152,15 +164,21 @@ export function LandingExperience() {
         </Link>
         <div className="flex items-center gap-2">
         {displayName ? (
-          <span className="max-w-[8rem] truncate rounded-full border border-karaoke-cyan/30 bg-karaoke-cyan/10 px-2.5 py-1.5 text-xs font-black text-karaoke-cyan sm:max-w-none sm:px-3">
-            {displayName}
-          </span>
-        ) : null}
+          <>
+            <span className="max-w-[8rem] truncate rounded-full border border-karaoke-cyan/30 bg-karaoke-cyan/10 px-2.5 py-1.5 text-xs font-black text-karaoke-cyan sm:max-w-none sm:px-3">
+              {displayName}
+            </span>
+            <button type="button" onClick={signOut} className="rounded-full border border-hairline-strong px-2.5 py-1.5 text-xs text-ink-soft transition hover:border-white/30 hover:bg-white/10 sm:px-3">
+              {t('logout')}
+            </button>
+          </>
+        ) : (
+          <Link href={`/${locale}/login`} className="rounded-full border border-hairline-strong px-2.5 py-1.5 text-xs text-ink-soft transition hover:border-white/30 hover:bg-white/10 sm:px-3">
+            {t('login')}
+          </Link>
+        )}
         <Link href={`/${nextLocale}`} className="rounded-full border border-hairline-strong px-2.5 py-1.5 text-xs text-ink-soft transition hover:border-white/30 hover:bg-white/10 sm:px-3">
           {t('language')}
-        </Link>
-        <Link href={`/${locale}/login`} className="rounded-full border border-hairline-strong px-2.5 py-1.5 text-xs text-ink-soft transition hover:border-white/30 hover:bg-white/10 sm:px-3">
-          {t('login')}
         </Link>
         </div>
       </nav>
@@ -198,9 +216,14 @@ export function LandingExperience() {
                   ))}
                 </div>
               ) : null}
-              <button type="button" onClick={() => router.push(`/${locale}/pick`)} className="mt-3 h-11 rounded-2xl bg-karaoke-cyan px-5 text-sm font-black text-canvas">
-                {t('resumePicking')}
-              </button>
+              <div className="mt-3 grid grid-cols-2 gap-3">
+                <button type="button" onClick={() => router.push(`/${locale}/pick`)} className="h-11 rounded-2xl bg-karaoke-cyan px-5 text-sm font-black text-canvas">
+                  {t('resumePicking')}
+                </button>
+                <button type="button" onClick={() => router.push(`/${locale}/pick?view=queue`)} className="h-11 rounded-2xl border border-karaoke-cyan/25 bg-white/[0.04] px-5 text-sm font-black text-karaoke-cyan">
+                  {t('viewQueue')}
+                </button>
+              </div>
             </div>
           ) : null}
         </motion.div>
@@ -212,17 +235,25 @@ export function LandingExperience() {
           className="rounded-[2rem] border border-hairline-strong bg-surface-card/90 p-4 shadow-glow backdrop-blur-xl sm:p-5"
         >
           <div className="rounded-[1.5rem] border border-white/10 bg-surface-elevated p-4 sm:p-5">
-            <label className="text-sm font-semibold text-ink-soft" htmlFor="qq-url">
-              {t('urlLabel')}
-            </label>
-            <input
-              id="qq-url"
-              value={url}
-              onChange={(event) => setUrl(event.target.value)}
-              disabled={status === 'loading'}
-              placeholder={t('urlPlaceholder')}
-              className="mt-2 h-12 w-full rounded-2xl border border-hairline-strong bg-black/35 px-4 text-sm text-white outline-none transition placeholder:text-body-muted focus:border-karaoke/70 focus:shadow-[0_0_0_4px_rgba(255,61,139,0.12)]"
-            />
+            <div className="flex items-center justify-between gap-3">
+              <label className="text-sm font-semibold text-ink-soft" htmlFor="qq-url">
+                {activeSource === 'manual' ? t('manualSourceTitle') : activeSource === 'spotify' ? t('spotifyUrlLabel') : activeSource === 'qq' ? t('urlLabel') : t('urlLabel')}
+              </label>
+              <button type="button" onClick={() => setShowSourcePicker(true)} className="rounded-full border border-karaoke-cyan/25 bg-karaoke-cyan/10 px-3 py-1.5 text-xs font-black text-karaoke-cyan">
+                {t('chooseSource')}
+              </button>
+            </div>
+            {activeSource !== 'manual' ? (
+              <input
+                id="qq-url"
+                value={url}
+                onChange={(event) => setUrl(event.target.value)}
+                disabled={status === 'loading'}
+                placeholder={activeSource === 'spotify' ? t('spotifyUrlPlaceholder') : t('urlPlaceholder')}
+                className="mt-2 h-12 w-full rounded-2xl border border-hairline-strong bg-black/35 px-4 text-sm text-white outline-none transition placeholder:text-body-muted focus:border-karaoke/70 focus:shadow-[0_0_0_4px_rgba(255,61,139,0.12)]"
+              />
+            ) : null}
+            {activeSource === 'spotify' ? <p className="mt-2 text-xs leading-5 text-body-muted">{t('spotifyExperimental')}</p> : null}
 
             <label className="mt-5 block text-sm font-semibold text-ink-soft" htmlFor="song-text">
               {t('textLabel')}
@@ -347,6 +378,34 @@ export function LandingExperience() {
           </div>
         ))}
       </section>
+      {showSourcePicker ? (
+        <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 px-5 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-[2rem] border border-hairline-strong bg-surface-card p-5 shadow-glow">
+            <div className="flex items-center justify-between">
+              <h2 className="font-display text-2xl font-black tracking-[-0.05em]">{t('sourcePickerTitle')}</h2>
+              <button type="button" onClick={() => setShowSourcePicker(false)} className="rounded-full border border-white/10 px-3 py-1 text-xs text-ink-soft">
+                {t('close')}
+              </button>
+            </div>
+            <div className="mt-4 grid gap-3">
+              {(['qq', 'spotify', 'manual'] as const).map((source) => (
+                <button
+                  key={source}
+                  type="button"
+                  onClick={() => {
+                    setActiveSource(source);
+                    setShowSourcePicker(false);
+                  }}
+                  className={`rounded-3xl border p-4 text-left transition ${activeSource === source ? 'border-karaoke-cyan/50 bg-karaoke-cyan/10' : 'border-white/10 bg-white/[0.04]'}`}
+                >
+                  <span className="block text-sm font-black text-white">{t(`sources.${source}.title`)}</span>
+                  <span className="mt-1 block text-xs leading-5 text-body-muted">{t(`sources.${source}.body`)}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </main>
   );
 }

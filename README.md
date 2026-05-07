@@ -39,6 +39,8 @@ Returns normalized songs:
 }
 ```
 
+`POST /api/import/spotify` is also available as an experimental public-page parser for Spotify playlist URLs. It does not require Spotify developer credentials, but it can fail when Spotify does not expose track metadata in the public HTML. If it returns no songs, paste the playlist text manually.
+
 ## Design direction
 
 The landing page uses the Resend and Framer dark design-system cues from `VoltAgent/awesome-design-md`: near-black canvas, lifted dark surfaces, hairline borders, atmospheric glow, pill controls, and mobile-first dense input cards.

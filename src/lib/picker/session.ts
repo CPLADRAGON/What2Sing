@@ -123,6 +123,19 @@ export function finishPickerQueue(state: PickerState): PickerState {
   };
 }
 
+export function restartWithUnselectedSongs(state: PickerState): PickerState {
+  const pickedKeys = new Set(state.liked.map(getSongKey));
+  const unselectedDeck = state.deck.filter((song) => !pickedKeys.has(getSongKey(song)));
+
+  return {
+    ...state,
+    deck: unselectedDeck,
+    currentIndex: 0,
+    skipped: [],
+    updatedAt: new Date().toISOString()
+  };
+}
+
 export function chooseSyncedPickerState(localState: PickerState | null, remoteState: PickerState | null): PickerState | null {
   if (!localState) {
     return remoteState;
@@ -165,9 +178,13 @@ function isImportedSong(value: unknown): value is ImportedSong {
     song.title.trim().length > 0 &&
     typeof song.artist === 'string' &&
     song.artist.trim().length > 0 &&
-    (song.platform === 'qq' || song.platform === 'manual') &&
+    (song.platform === 'qq' || song.platform === 'spotify' || song.platform === 'manual') &&
     Array.isArray(song.tags)
   );
+}
+
+function getSongKey(song: ImportedSong) {
+  return `${song.title.trim().toLowerCase()}::${song.artist.trim().toLowerCase()}`;
 }
 
 function isPickerState(value: unknown): value is PickerState {

@@ -18,6 +18,7 @@ import {
   isPickerComplete,
   PICKER_STORAGE_KEY,
   removeLikedSong,
+  restartWithUnselectedSongs,
   serializePickerState,
   type PickerDecision,
   type PickerOrderMode,
@@ -48,6 +49,9 @@ export function PickerExperience() {
 
   useEffect(() => {
     let isMounted = true;
+    const queueViewTimer = new URLSearchParams(window.location.search).get('view') === 'queue'
+      ? window.setTimeout(() => setViewMode('selection'), 0)
+      : null;
 
     async function loadSavedProgress() {
       const raw = window.localStorage.getItem(PICKER_STORAGE_KEY);
@@ -74,6 +78,9 @@ export function PickerExperience() {
 
     return () => {
       isMounted = false;
+      if (queueViewTimer) {
+        window.clearTimeout(queueViewTimer);
+      }
     };
   }, []);
 
@@ -291,7 +298,11 @@ export function PickerExperience() {
                   </div>
                 </motion.article>
               ) : (
-                <CompletePanel state={safeState} onSelection={() => setViewMode('selection')} />
+                <CompletePanel
+                  state={safeState}
+                  onSelection={() => setViewMode('selection')}
+                  onReswipe={() => setState((current) => (current ? restartWithUnselectedSongs(current) : current))}
+                />
               )}
             </AnimatePresence>
           </div>
@@ -413,8 +424,10 @@ function SelectionPanel({state, onRemove, onContinue, onFinish}: {state: PickerS
   );
 }
 
-function CompletePanel({state, onSelection}: {state: PickerState; onSelection: () => void}) {
+function CompletePanel({state, onSelection, onReswipe}: {state: PickerState; onSelection: () => void; onReswipe: () => void}) {
   const t = useTranslations('picker');
+  const pickedKeys = new Set(state.liked.map((song) => `${song.title.trim().toLowerCase()}::${song.artist.trim().toLowerCase()}`));
+  const unselectedCount = state.deck.filter((song) => !pickedKeys.has(`${song.title.trim().toLowerCase()}::${song.artist.trim().toLowerCase()}`)).length;
 
   return (
     <motion.div
@@ -427,6 +440,7 @@ function CompletePanel({state, onSelection}: {state: PickerState; onSelection: (
         <p className="text-xs font-bold uppercase tracking-[0.24em] text-karaoke-cyan">{t('completeEyebrow')}</p>
         <h1 className="mt-3 font-display text-4xl font-black tracking-[-0.06em]">{t('completeTitle')}</h1>
         <p className="mt-3 text-sm leading-6 text-body-muted">{t('completeBody', {count: state.liked.length})}</p>
+        <p className="mt-2 rounded-2xl border border-karaoke-cyan/20 bg-karaoke-cyan/10 px-3 py-2 text-xs leading-5 text-ink-soft">{t('allSwiped')}</p>
       </div>
       <div className="space-y-2 overflow-y-auto">
         {state.liked.map((song, index) => (
@@ -436,9 +450,14 @@ function CompletePanel({state, onSelection}: {state: PickerState; onSelection: (
           </div>
         ))}
       </div>
-      <button type="button" onClick={onSelection} className="mt-4 h-12 rounded-2xl bg-white text-sm font-black text-canvas">
-        {t('viewPicks')}
-      </button>
+      <div className="mt-4 grid grid-cols-2 gap-3">
+        <button type="button" onClick={onSelection} className="h-12 rounded-2xl bg-white text-sm font-black text-canvas">
+          {t('viewPicks')}
+        </button>
+        <button type="button" onClick={onReswipe} disabled={unselectedCount === 0} className="h-12 rounded-2xl border border-karaoke-cyan/25 bg-karaoke-cyan/10 text-sm font-black text-karaoke-cyan disabled:opacity-40">
+          {t('reswipeUnselected')}
+        </button>
+      </div>
     </motion.div>
   );
 }

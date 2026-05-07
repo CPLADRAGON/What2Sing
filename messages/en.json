@@ -9,6 +9,13 @@
     "subtitle": "Paste a QQ Music share URL or a messy song list. KTV-Picker normalizes every track for fast swipe picking and room sync.",
     "urlLabel": "QQ Music share URL",
     "urlPlaceholder": "https://y.qq.com/...",
+    "spotifyUrlLabel": "Spotify playlist URL",
+    "spotifyUrlPlaceholder": "https://open.spotify.com/playlist/...",
+    "spotifyExperimental": "Spotify public-page import is experimental. If it cannot read tracks, paste the playlist text below.",
+    "manualSourceTitle": "Manual song paste",
+    "chooseSource": "Source",
+    "sourcePickerTitle": "Choose import source",
+    "close": "Close",
     "textLabel": "Or paste songs",
     "textPlaceholder": "Blue and White Porcelain - Jay Chou\nLater - Rene Liu",
     "importButton": "Import songs",
@@ -23,6 +30,7 @@
     "nextAfterImport": "Next: review the preview list, then start picking.",
     "startPicking": "Start picking",
     "resumePicking": "Resume saved progress",
+    "viewQueue": "View queue",
     "savedProgress": "You have saved picker progress from earlier.",
     "selectedCount": "{count} selected songs are ready for KTV.",
     "viewAllSelected": "View all",
@@ -39,7 +47,22 @@
     "previewTitle": "Tonight's candidates",
     "steps": ["Import", "Swipe", "Sing together"],
     "language": "中文",
-    "login": "Log in"
+    "login": "Log in",
+    "logout": "Log out",
+    "sources": {
+      "qq": {
+        "title": "QQ Music",
+        "body": "Import from QQ Music playlist/share links."
+      },
+      "spotify": {
+        "title": "Spotify experimental",
+        "body": "Try public playlist-page parsing, with manual paste fallback."
+      },
+      "manual": {
+        "title": "Manual paste",
+        "body": "Paste song lines directly when app imports are unavailable."
+      }
+    }
   },
   "picker": {
     "title": "Pick",
@@ -74,7 +97,9 @@
     "pick": "Pick",
     "completeEyebrow": "Queue ready",
     "completeTitle": "Tonight's picks",
-    "completeBody": "You picked {count} songs. Room sync is next so friends can vote together."
+    "completeBody": "You picked {count} songs. Room sync is next so friends can vote together.",
+    "allSwiped": "All songs in this pass have finished swiping.",
+    "reswipeUnselected": "Re-swipe unselected"
   },
   "auth": {
     "loginTitle": "Log in to save your KTV history",

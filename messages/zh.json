@@ -9,6 +9,13 @@
     "subtitle": "粘贴 QQ 音乐分享链接，或直接贴一串凌乱的歌名。KTV-Picker 会统一整理为可滑动筛选、可房间同步的歌曲队列。",
     "urlLabel": "QQ 音乐分享链接",
     "urlPlaceholder": "https://y.qq.com/...",
+    "spotifyUrlLabel": "Spotify 歌单链接",
+    "spotifyUrlPlaceholder": "https://open.spotify.com/playlist/...",
+    "spotifyExperimental": "Spotify 公开页面导入仍是实验功能。如果无法读取歌曲，请把歌单文本粘贴到下方。",
+    "manualSourceTitle": "手动粘贴歌曲",
+    "chooseSource": "来源",
+    "sourcePickerTitle": "选择导入来源",
+    "close": "关闭",
     "textLabel": "或粘贴歌曲文本",
     "textPlaceholder": "青花瓷 - 周杰伦\n后来 - 刘若英",
     "importButton": "导入歌曲",
@@ -23,6 +30,7 @@
     "nextAfterImport": "下一步：先检查预览歌单，然后开始筛歌。",
     "startPicking": "开始筛歌",
     "resumePicking": "继续上次筛歌",
+    "viewQueue": "查看待唱清单",
     "savedProgress": "检测到你之前保存过筛歌进度。",
     "selectedCount": "已有 {count} 首已选歌曲可用于 KTV。",
     "viewAllSelected": "查看全部",
@@ -39,7 +47,22 @@
     "previewTitle": "今晚候选曲",
     "steps": ["导入", "滑动", "合唱"],
     "language": "English",
-    "login": "登录"
+    "login": "登录",
+    "logout": "退出",
+    "sources": {
+      "qq": {
+        "title": "QQ 音乐",
+        "body": "从 QQ 音乐歌单或分享链接导入。"
+      },
+      "spotify": {
+        "title": "Spotify 实验版",
+        "body": "尝试解析公开歌单页面，失败时可手动粘贴。"
+      },
+      "manual": {
+        "title": "手动粘贴",
+        "body": "当平台导入不可用时，直接粘贴歌曲文本。"
+      }
+    }
   },
   "picker": {
     "title": "筛歌",
@@ -74,7 +97,9 @@
     "pick": "Pick",
     "completeEyebrow": "歌单就绪",
     "completeTitle": "今晚待唱清单",
-    "completeBody": "你选中了 {count} 首歌。下一步会加入房间同步，让朋友一起投票。"
+    "completeBody": "你选中了 {count} 首歌。下一步会加入房间同步，让朋友一起投票。",
+    "allSwiped": "这一轮的歌曲已经全部滑完。",
+    "reswipeUnselected": "重筛未选歌曲"
   },
   "auth": {
     "loginTitle": "登录后保存你的 KTV 记录",

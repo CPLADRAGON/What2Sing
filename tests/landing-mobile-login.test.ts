@@ -26,6 +26,22 @@ describe('landing mobile navigation', () => {
     expect(source).toContain('setShowAllSelected');
   });
 
+  it('shows logout instead of login for signed-in users', () => {
+    const source = readFileSync('src/components/landing/landing-experience.tsx', 'utf8');
+
+    expect(source).toContain('signOut');
+    expect(source).toContain("displayName ? (");
+  });
+
+  it('offers an import source popup with QQ, Spotify, and manual paste', () => {
+    const source = readFileSync('src/components/landing/landing-experience.tsx', 'utf8');
+
+    expect(source).toContain('showSourcePicker');
+    expect(source).toContain("activeSource === 'spotify'");
+    expect(source).toContain("activeSource === 'qq'");
+    expect(source).toContain("activeSource === 'manual'");
+  });
+
   it('uses immediate card transitions instead of waiting for exit animations', () => {
     const source = readFileSync('src/components/picker/picker-experience.tsx', 'utf8');
 

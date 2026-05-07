@@ -10,6 +10,7 @@ import {
   getCurrentSong,
   isPickerComplete,
   removeLikedSong,
+  restartWithUnselectedSongs,
   serializeImportedSongs,
   serializePickerState
 } from '@/lib/picker/session';
@@ -109,5 +110,17 @@ describe('picker session', () => {
     expect(finished.currentIndex).toBe(songs.length);
     expect(finished.liked).toEqual([songs[0]]);
     expect(isPickerComplete(finished)).toBe(true);
+  });
+
+  it('restarts swiping with all unselected songs while keeping picked songs', () => {
+    const first = chooseCurrentSong(createPickerState(songs), 'like');
+    const second = chooseCurrentSong(first, 'skip');
+    const restarted = restartWithUnselectedSongs(finishPickerQueue(second));
+
+    expect(restarted.deck).toEqual([songs[1], songs[2]]);
+    expect(restarted.liked).toEqual([songs[0]]);
+    expect(restarted.skipped).toEqual([]);
+    expect(restarted.currentIndex).toBe(0);
+    expect(isPickerComplete(restarted)).toBe(false);
   });
 });
