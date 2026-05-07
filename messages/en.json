@@ -1,0 +1,27 @@
+{
+  "meta": {
+    "title": "KTV-Picker | Never run out of songs again",
+    "description": "Import QQ Music playlists or paste song text, then pick the perfect KTV queue with friends."
+  },
+  "landing": {
+    "badge": "Mobile-first KTV song picking",
+    "title": "Bring the playlist. We will find the next song.",
+    "subtitle": "Paste a QQ Music share URL or a messy song list. KTV-Picker normalizes every track for fast swipe picking and room sync.",
+    "urlLabel": "QQ Music share URL",
+    "urlPlaceholder": "https://y.qq.com/...",
+    "textLabel": "Or paste songs",
+    "textPlaceholder": "Blue and White Porcelain - Jay Chou\nLater - Rene Liu",
+    "importButton": "Import songs",
+    "sampleButton": "Use sample list",
+    "emptyHint": "Paste a URL or at least one song line to begin.",
+    "imported": "Imported {count} songs",
+    "features": {
+      "import": "QQ Music parser",
+      "swipe": "Swipe-ready queue",
+      "realtime": "Supabase room sync"
+    },
+    "previewTitle": "Tonight's candidates",
+    "steps": ["Import", "Swipe", "Sing together"],
+    "language": "中文"
+  }
+}

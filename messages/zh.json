@@ -1,0 +1,27 @@
+{
+  "meta": {
+    "title": "KTV-Picker | 再也不怕歌荒",
+    "description": "导入 QQ 音乐歌单或粘贴歌曲文本，和朋友一起快速筛选 KTV 待唱清单。"
+  },
+  "landing": {
+    "badge": "为手机端 KTV 聚会打造",
+    "title": "把歌单丢进来，下一首我来帮你选。",
+    "subtitle": "粘贴 QQ 音乐分享链接，或直接贴一串凌乱的歌名。KTV-Picker 会统一整理为可滑动筛选、可房间同步的歌曲队列。",
+    "urlLabel": "QQ 音乐分享链接",
+    "urlPlaceholder": "https://y.qq.com/...",
+    "textLabel": "或粘贴歌曲文本",
+    "textPlaceholder": "青花瓷 - 周杰伦\n后来 - 刘若英",
+    "importButton": "导入歌曲",
+    "sampleButton": "使用示例歌单",
+    "emptyHint": "请先粘贴链接或至少一行歌曲。",
+    "imported": "已导入 {count} 首歌",
+    "features": {
+      "import": "QQ 音乐解析",
+      "swipe": "滑动式筛选",
+      "realtime": "Supabase 房间同步"
+    },
+    "previewTitle": "今晚候选曲",
+    "steps": ["导入", "滑动", "合唱"],
+    "language": "English"
+  }
+}
