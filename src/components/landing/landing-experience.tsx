@@ -155,6 +155,11 @@ export function LandingExperience() {
             {message ? (
               <p className={`mt-3 text-sm ${status === 'error' ? 'text-karaoke' : 'text-karaoke-cyan'}`}>{message}</p>
             ) : null}
+            {status === 'done' ? (
+              <p className="mt-2 rounded-2xl border border-karaoke-cyan/20 bg-karaoke-cyan/10 px-3 py-2 text-xs leading-5 text-ink-soft">
+                {t('nextAfterImport')}
+              </p>
+            ) : null}
           </div>
 
           <div className="mt-4 rounded-[1.5rem] border border-hairline-strong bg-black/30 p-4">

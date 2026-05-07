@@ -15,6 +15,7 @@
     "sampleButton": "使用示例歌单",
     "emptyHint": "请先粘贴链接或至少一行歌曲。",
     "imported": "已导入 {count} 首歌",
+    "nextAfterImport": "下一步：先检查预览歌单。滑动筛选和房间同步是接下来要开发的功能。",
     "features": {
       "import": "QQ 音乐解析",
       "swipe": "滑动式筛选",

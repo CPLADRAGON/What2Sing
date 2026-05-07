@@ -15,6 +15,7 @@
     "sampleButton": "Use sample list",
     "emptyHint": "Paste a URL or at least one song line to begin.",
     "imported": "Imported {count} songs",
+    "nextAfterImport": "Next: review the preview list. Swipe picking and room sync are the next build step.",
     "features": {
       "import": "QQ Music parser",
       "swipe": "Swipe-ready queue",

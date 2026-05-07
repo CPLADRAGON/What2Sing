@@ -30,6 +30,66 @@ export function parseQQMusicSongs(html: string): ImportedSong[] {
   return collectSongCandidates(payload);
 }
 
+export function parseQQMusicPayload(payload: unknown): ImportedSong[] {
+  return collectSongCandidates(payload);
+}
+
+export function extractQQMusicPlaylistIds(...sources: Array<string | null | undefined>): string[] {
+  const ids = new Set<string>();
+
+  for (const source of sources) {
+    if (!source) {
+      continue;
+    }
+
+    const candidates = expandEncodedSources(source);
+
+    for (const candidate of candidates) {
+      collectPlaylistIds(candidate, ids);
+    }
+  }
+
+  return Array.from(ids);
+}
+
+function expandEncodedSources(source: string): string[] {
+  const candidates = new Set([source]);
+  let current = source;
+
+  for (let depth = 0; depth < 3; depth += 1) {
+    try {
+      const decoded = decodeURIComponent(current);
+
+      if (decoded === current) {
+        break;
+      }
+
+      candidates.add(decoded);
+      current = decoded;
+    } catch {
+      break;
+    }
+  }
+
+  return Array.from(candidates);
+}
+
+function collectPlaylistIds(source: string, ids: Set<string>) {
+  const patterns = [
+    /\/playlist\/(\d{5,})/gi,
+    /[?&](?:disstid|dirid|id)=([0-9]{5,})/gi,
+    /taoge\.html[^"'<>]*[?&]id=([0-9]{5,})/gi
+  ];
+
+  for (const pattern of patterns) {
+    let match: RegExpExecArray | null;
+
+    while ((match = pattern.exec(source)) !== null) {
+      ids.add(match[1]);
+    }
+  }
+}
+
 function extractInitialData(scriptText: string): unknown | null {
   const markerIndex = scriptText.indexOf('__INITIAL_DATA__');
   const assignmentIndex = scriptText.indexOf('=', markerIndex);
