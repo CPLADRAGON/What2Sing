@@ -1,5 +1,6 @@
 import {describe, expect, it} from 'vitest';
 import {
+  appendImportedSongsToPickerState,
   canEnterSelectionMode,
   chooseCurrentSong,
   chooseSyncedPickerState,
@@ -142,5 +143,26 @@ describe('picker session', () => {
     expect(restarted.orderMode).toBe('random');
     expect(restarted.liked).toEqual([longerDeck[0]]);
     expect(restarted.currentIndex).toBe(0);
+  });
+
+  it('adds manually imported songs without losing current swipe progress', () => {
+    const inProgress = chooseCurrentSong(chooseCurrentSong(createPickerState(songs), 'like'), 'skip');
+    const manualSong: ImportedSong = {title: '晴天', artist: '周杰伦', platform: 'manual', tags: []};
+    const merged = appendImportedSongsToPickerState(inProgress, [manualSong]);
+
+    expect(merged.deck).toEqual([...songs, manualSong]);
+    expect(merged.liked).toEqual([songs[0]]);
+    expect(merged.skipped).toEqual([songs[1]]);
+    expect(merged.currentIndex).toBe(2);
+    expect(getCurrentSong(merged)).toEqual(songs[2]);
+  });
+
+  it('does not duplicate songs already in the current swipe deck', () => {
+    const inProgress = chooseCurrentSong(createPickerState(songs), 'like');
+    const merged = appendImportedSongsToPickerState(inProgress, [songs[1]]);
+
+    expect(merged.deck).toEqual(songs);
+    expect(merged.currentIndex).toBe(1);
+    expect(merged.liked).toEqual([songs[0]]);
   });
 });

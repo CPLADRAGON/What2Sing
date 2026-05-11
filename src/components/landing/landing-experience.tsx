@@ -8,9 +8,9 @@ import {useEffect, useMemo, useState} from 'react';
 import {getUserDisplayName} from '@/lib/auth/profile';
 import {normalizeSongs} from '@/lib/importers/manual';
 import type {ImportedSong} from '@/lib/importers/qq';
-import {loadLatestPickerStateForCurrentUser, saveImportedDeckForCurrentUser} from '@/lib/picker/persistence';
+import {loadLatestPickerStateForCurrentUser, saveImportedDeckForCurrentUser, savePickerStateForCurrentUser} from '@/lib/picker/persistence';
 import {generateSingingOrder, pickRandomSong} from '@/lib/picker/queue';
-import {chooseSyncedPickerState, deserializePickerState, PICKER_STORAGE_KEY, serializeImportedSongs, serializePickerState} from '@/lib/picker/session';
+import {appendImportedSongsToPickerState, chooseSyncedPickerState, deserializePickerState, PICKER_STORAGE_KEY, serializeImportedSongs, serializePickerState} from '@/lib/picker/session';
 import {supabase} from '@/lib/supabase';
 
 const sampleSongs = '青花瓷 - 周杰伦\n后来 - 刘若英\n修炼爱情 - 林俊杰\n倔强 - 五月天';
@@ -139,12 +139,34 @@ export function LandingExperience() {
       }
 
       const nextSongs = [...importedSongs, ...manualSongs];
-      window.localStorage.setItem(PICKER_STORAGE_KEY, serializeImportedSongs(nextSongs));
-      void saveImportedDeckForCurrentUser(nextSongs);
-      setSongs(nextSongs);
+      const localState = deserializePickerState(window.localStorage.getItem(PICKER_STORAGE_KEY));
+      const remoteSession = await loadLatestPickerStateForCurrentUser();
+      const savedState = chooseSyncedPickerState(localState, remoteSession?.state ?? null);
+      const savedStateHasProgress = savedState ? savedState.currentIndex > 0 || savedState.liked.length > 0 || savedState.skipped.length > 0 : false;
+
+      if (savedState?.deck.length) {
+        const mergedState = appendImportedSongsToPickerState(savedState, nextSongs);
+
+        if (savedStateHasProgress) {
+          window.localStorage.setItem(PICKER_STORAGE_KEY, serializePickerState(mergedState));
+          void savePickerStateForCurrentUser(mergedState);
+        } else {
+          window.localStorage.setItem(PICKER_STORAGE_KEY, serializeImportedSongs(mergedState.deck));
+          void saveImportedDeckForCurrentUser(mergedState.deck);
+        }
+
+        setSongs(mergedState.deck);
+        setSavedLikedSongs(mergedState.liked);
+        setHasSavedProgress(savedStateHasProgress);
+      } else {
+        window.localStorage.setItem(PICKER_STORAGE_KEY, serializeImportedSongs(nextSongs));
+        void saveImportedDeckForCurrentUser(nextSongs);
+        setSongs(nextSongs);
+        setHasSavedProgress(false);
+      }
+
       setStatus('done');
       setMessage(t('imported', {count: nextSongs.length}));
-      setHasSavedProgress(false);
     } catch (error) {
       setStatus('error');
       setMessage(error instanceof DOMException && error.name === 'AbortError' ? t('timeoutError') : error instanceof Error ? error.message : 'Import failed');

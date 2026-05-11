@@ -42,6 +42,13 @@ describe('landing mobile navigation', () => {
     expect(source).toContain("activeSource === 'manual'");
   });
 
+  it('merges newly keyed songs with existing swipe progress instead of overwriting it', () => {
+    const source = readFileSync('src/components/landing/landing-experience.tsx', 'utf8');
+
+    expect(source).toContain('appendImportedSongsToPickerState');
+    expect(source).toContain('savePickerStateForCurrentUser');
+  });
+
   it('uses immediate card transitions instead of waiting for exit animations', () => {
     const source = readFileSync('src/components/picker/picker-experience.tsx', 'utf8');
 

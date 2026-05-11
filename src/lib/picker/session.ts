@@ -128,6 +128,26 @@ export function finishPickerQueue(state: PickerState): PickerState {
   };
 }
 
+export function appendImportedSongsToPickerState(state: PickerState, songs: ImportedSong[]): PickerState {
+  const existingKeys = new Set(state.deck.map(getSongKey));
+  const newSongs = songs.filter((song) => {
+    const key = getSongKey(song);
+
+    if (existingKeys.has(key)) {
+      return false;
+    }
+
+    existingKeys.add(key);
+    return true;
+  });
+
+  return {
+    ...state,
+    deck: [...state.deck, ...newSongs],
+    updatedAt: new Date().toISOString()
+  };
+}
+
 export function restartWithUnselectedSongs(state: PickerState, options: RestartWithUnselectedSongsOptions = {}): PickerState {
   const pickedKeys = new Set(state.liked.map(getSongKey));
   const unselectedDeck = state.deck.filter((song) => !pickedKeys.has(getSongKey(song)));
