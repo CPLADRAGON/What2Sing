@@ -5,6 +5,7 @@ import {useLocale, useTranslations} from 'next-intl';
 import Link from 'next/link';
 import {useRouter} from 'next/navigation';
 import {useEffect, useMemo, useState} from 'react';
+import {flushSync} from 'react-dom';
 import {loadLatestPickerStateForCurrentUser, savePickerStateForCurrentUser} from '@/lib/picker/persistence';
 import {generateSingingOrder, pickRandomSong} from '@/lib/picker/queue';
 import {
@@ -18,6 +19,7 @@ import {
   isPickerComplete,
   PICKER_STORAGE_KEY,
   removeLikedSong,
+  reorderRemainingSongs,
   restartWithUnselectedSongs,
   serializePickerState,
   type PickerDecision,
@@ -38,6 +40,9 @@ export function PickerExperience() {
   const stageGlowX = useTransform(x, [-180, 0, 180], ['-24%', '0%', '24%']);
   const likeOpacity = useTransform(x, [24, 120], [0, 1]);
   const skipOpacity = useTransform(x, [-120, -24], [1, 0]);
+  const likeScale = useTransform(x, [24, 150], [0.92, 1.12]);
+  const skipScale = useTransform(x, [-150, -24], [1.12, 0.92]);
+  const directionCueOpacity = useTransform(x, [-160, -24, 0, 24, 160], [0.42, 0.14, 0, 0.14, 0.42]);
   const [state, setState] = useState<PickerState | null>(null);
   const [needsOrderChoice, setNeedsOrderChoice] = useState(true);
   const [viewMode, setViewMode] = useState<'swipe' | 'selection'>('swipe');
@@ -146,13 +151,18 @@ export function PickerExperience() {
     void savePickerStateForCurrentUser(nextState);
   }
 
+  function changeRemainingOrder(orderMode: PickerOrderMode) {
+    setState((current) => (current ? reorderRemainingSongs(current, orderMode, `${Date.now()}-${current.currentIndex}-${current.deck.length}`) : current));
+  }
+
   function decide(decision: PickerDecision) {
     if (isSwipeLocked || !currentSong) {
       return;
     }
 
+    const exitDirection = decision === 'like' ? 1 : -1;
     setIsSwipeLocked(true);
-    setSwipeDirection(decision === 'like' ? 1 : -1);
+    flushSync(() => setSwipeDirection(exitDirection));
     setFeedbackMessage({label: decision === 'like' ? t('pickedFeedback') : t('skippedFeedback'), tone: decision === 'like' ? 'like' : 'skip', id: Date.now()});
     vibrate(decision === 'like' ? [12, 32, 18] : 12);
     setState((current) => (current ? chooseCurrentSong(current, decision) : current));
@@ -262,6 +272,29 @@ export function PickerExperience() {
             <motion.div className="h-full rounded-full bg-gradient-to-r from-karaoke to-karaoke-cyan" animate={{width: `${progress}%`}} />
           </div>
 
+          <div className="mb-4 rounded-[1.5rem] border border-white/10 bg-white/[0.035] p-3 backdrop-blur-xl">
+            <div className="mb-2 flex items-center justify-between gap-3">
+              <p className="text-[10px] font-black uppercase tracking-[0.2em] text-body-muted">{t('resumeOrderTitle')}</p>
+              <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-karaoke-cyan">{safeState.orderMode}</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => changeRemainingOrder('ordered')}
+                className={`h-9 rounded-xl text-xs font-black transition ${safeState.orderMode === 'ordered' ? 'bg-white text-canvas' : 'border border-white/10 bg-white/[0.04] text-ink-soft'}`}
+              >
+                {t('keepCurrentOrder')}
+              </button>
+              <button
+                type="button"
+                onClick={() => changeRemainingOrder('random')}
+                className={`h-9 rounded-xl text-xs font-black transition ${safeState.orderMode === 'random' ? 'bg-karaoke-cyan text-canvas' : 'border border-karaoke-cyan/25 bg-karaoke-cyan/10 text-karaoke-cyan'}`}
+              >
+                {t('shuffleRemaining')}
+              </button>
+            </div>
+          </div>
+
           <AnimatePresence>
             {feedbackMessage ? (
               <motion.div
@@ -280,6 +313,11 @@ export function PickerExperience() {
           </AnimatePresence>
 
           <div className="relative h-[28rem]">
+            <motion.div
+              aria-hidden="true"
+              style={{opacity: directionCueOpacity}}
+              className="pointer-events-none absolute inset-x-2 top-10 z-0 h-72 rounded-[2.5rem] bg-[linear-gradient(90deg,rgba(255,61,139,0.22),transparent_45%,rgba(85,230,255,0.24))] blur-2xl"
+            />
             {nextSongs.map((song, index) => (
               <motion.div
                 key={`${song.title}-${song.artist}-stack-${index}`}
@@ -308,14 +346,14 @@ export function PickerExperience() {
                   style={{x, y: dragLift, rotate, scale, boxShadow: cardGlow}}
                   initial={{opacity: 0, y: 18, scale: 0.98}}
                   animate={{opacity: 1, y: 0, rotate: 0}}
-                  exit={{opacity: 0, x: swipeDirection * 460, rotate: swipeDirection * 18, scale: 0.9, transition: {duration: 0.2, ease: 'easeOut'}}}
-                  transition={{type: 'spring', stiffness: 380, damping: 30, mass: 0.8}}
+                  exit={{opacity: 0, x: swipeDirection * 620, y: -48, rotate: swipeDirection * 26, scale: 0.86, transition: {duration: 0.24, ease: [0.22, 1, 0.36, 1]}}}
+                  transition={{type: 'spring', stiffness: 420, damping: 28, mass: 0.74}}
                   className="absolute inset-0 flex touch-pan-y cursor-grab flex-col justify-between rounded-[2.25rem] border border-hairline-strong bg-[linear-gradient(145deg,rgba(255,255,255,0.13),rgba(255,255,255,0.035))] p-7 shadow-glow backdrop-blur-xl active:cursor-grabbing"
                 >
-                  <motion.div style={{opacity: skipOpacity}} className="pointer-events-none absolute left-6 top-20 rotate-[-10deg] rounded-2xl border-2 border-karaoke px-4 py-2 text-lg font-black uppercase tracking-[0.18em] text-karaoke">
+                  <motion.div style={{opacity: skipOpacity, scale: skipScale}} className="pointer-events-none absolute left-6 top-20 rotate-[-10deg] rounded-2xl border-2 border-karaoke bg-karaoke/10 px-4 py-2 text-lg font-black uppercase tracking-[0.18em] text-karaoke shadow-[0_0_30px_rgba(255,61,139,0.28)]">
                     {t('skipBadge')}
                   </motion.div>
-                  <motion.div style={{opacity: likeOpacity}} className="pointer-events-none absolute right-6 top-20 rotate-[10deg] rounded-2xl border-2 border-karaoke-cyan px-4 py-2 text-lg font-black uppercase tracking-[0.18em] text-karaoke-cyan">
+                  <motion.div style={{opacity: likeOpacity, scale: likeScale}} className="pointer-events-none absolute right-6 top-20 rotate-[10deg] rounded-2xl border-2 border-karaoke-cyan bg-karaoke-cyan/10 px-4 py-2 text-lg font-black uppercase tracking-[0.18em] text-karaoke-cyan shadow-[0_0_30px_rgba(85,230,255,0.28)]">
                     {t('likeBadge')}
                   </motion.div>
 

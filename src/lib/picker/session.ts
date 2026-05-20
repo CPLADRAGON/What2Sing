@@ -148,6 +148,19 @@ export function appendImportedSongsToPickerState(state: PickerState, songs: Impo
   };
 }
 
+export function reorderRemainingSongs(state: PickerState, orderMode: PickerOrderMode, seed = 'ktv-picker-resume'): PickerState {
+  const completedDeck = state.deck.slice(0, state.currentIndex);
+  const remainingDeck = state.deck.slice(state.currentIndex);
+  const deck = orderMode === 'random' ? [...completedDeck, ...shuffleSongs(remainingDeck, seed)] : [...completedDeck, ...remainingDeck];
+
+  return {
+    ...state,
+    deck,
+    orderMode,
+    updatedAt: new Date().toISOString()
+  };
+}
+
 export function restartWithUnselectedSongs(state: PickerState, options: RestartWithUnselectedSongsOptions = {}): PickerState {
   const pickedKeys = new Set(state.liked.map(getSongKey));
   const unselectedDeck = state.deck.filter((song) => !pickedKeys.has(getSongKey(song)));

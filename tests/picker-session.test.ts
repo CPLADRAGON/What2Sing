@@ -11,6 +11,7 @@ import {
   getCurrentSong,
   isPickerComplete,
   removeLikedSong,
+  reorderRemainingSongs,
   restartWithUnselectedSongs,
   serializeImportedSongs,
   serializePickerState
@@ -164,5 +165,23 @@ describe('picker session', () => {
     expect(merged.deck).toEqual(songs);
     expect(merged.currentIndex).toBe(1);
     expect(merged.liked).toEqual([songs[0]]);
+  });
+
+  it('reshuffles only songs still waiting for swiping', () => {
+    const longerDeck: ImportedSong[] = [
+      ...songs,
+      {title: '晴天', artist: '周杰伦', platform: 'qq', tags: []},
+      {title: '勇气', artist: '梁静茹', platform: 'manual', tags: []}
+    ];
+    const inProgress = chooseCurrentSong(chooseCurrentSong(createPickerState(longerDeck), 'like'), 'skip');
+    const reordered = reorderRemainingSongs(inProgress, 'random', 'resume-random');
+
+    expect(reordered.deck.slice(0, inProgress.currentIndex)).toEqual(longerDeck.slice(0, inProgress.currentIndex));
+    expect(reordered.deck.slice(inProgress.currentIndex)).not.toEqual(longerDeck.slice(inProgress.currentIndex));
+    expect([...reordered.deck.slice(inProgress.currentIndex)].sort((a, b) => a.title.localeCompare(b.title))).toEqual([...longerDeck.slice(inProgress.currentIndex)].sort((a, b) => a.title.localeCompare(b.title)));
+    expect(reordered.currentIndex).toBe(inProgress.currentIndex);
+    expect(reordered.liked).toEqual(inProgress.liked);
+    expect(reordered.skipped).toEqual(inProgress.skipped);
+    expect(reordered.orderMode).toBe('random');
   });
 });
