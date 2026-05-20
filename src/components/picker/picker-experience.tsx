@@ -30,8 +30,12 @@ export function PickerExperience() {
   const locale = useLocale();
   const router = useRouter();
   const x = useMotionValue(0);
-  const rotate = useTransform(x, [-180, 0, 180], [-10, 0, 10]);
-  const scale = useTransform(x, [-180, 0, 180], [1.02, 1, 1.02]);
+  const rotate = useTransform(x, [-220, 0, 220], [-16, 0, 16]);
+  const scale = useTransform(x, [-220, 0, 220], [1.04, 1, 1.04]);
+  const dragLift = useTransform(x, [-220, 0, 220], [-10, 0, -10]);
+  const cardGlow = useTransform(x, [-180, 0, 180], ['0 24px 90px rgba(255,61,139,0.30)', '0 18px 70px rgba(0,0,0,0.35)', '0 24px 90px rgba(85,230,255,0.30)']);
+  const stageGlowOpacity = useTransform(x, [-180, 0, 180], [0.5, 0, 0.5]);
+  const stageGlowX = useTransform(x, [-180, 0, 180], ['-24%', '0%', '24%']);
   const likeOpacity = useTransform(x, [24, 120], [0, 1]);
   const skipOpacity = useTransform(x, [-120, -24], [1, 0]);
   const [state, setState] = useState<PickerState | null>(null);
@@ -41,6 +45,7 @@ export function PickerExperience() {
   const [saveMessage, setSaveMessage] = useState('');
   const [isDragging, setIsDragging] = useState(false);
   const [isSwipeLocked, setIsSwipeLocked] = useState(false);
+  const [feedbackMessage, setFeedbackMessage] = useState<{label: string; tone: 'like' | 'skip'; id: number} | null>(null);
   const loaded = state !== null;
   const safeState = state ?? createPickerState([]);
   const currentSong = getCurrentSong(safeState);
@@ -129,6 +134,9 @@ export function PickerExperience() {
   }, [needsOrderChoice, state]);
 
   const nextSongs = useMemo(() => safeState.deck.slice(safeState.currentIndex + 1, safeState.currentIndex + 4), [safeState]);
+  const deckLift = isDragging ? 12 : 18;
+  const deckScaleStep = isDragging ? 0.025 : 0.035;
+  const deckOpacityBase = isDragging ? 0.72 : 0.58;
 
   function chooseMode(orderMode: PickerOrderMode) {
     const nextState = createPickerState(safeState.deck, {orderMode, seed: `${Date.now()}-${safeState.deck.length}`});
@@ -145,12 +153,14 @@ export function PickerExperience() {
 
     setIsSwipeLocked(true);
     setSwipeDirection(decision === 'like' ? 1 : -1);
-    vibrate();
+    setFeedbackMessage({label: decision === 'like' ? t('pickedFeedback') : t('skippedFeedback'), tone: decision === 'like' ? 'like' : 'skip', id: Date.now()});
+    vibrate(decision === 'like' ? [12, 32, 18] : 12);
     setState((current) => (current ? chooseCurrentSong(current, decision) : current));
     window.setTimeout(() => {
       setIsSwipeLocked(false);
       x.set(0);
     }, 220);
+    window.setTimeout(() => setFeedbackMessage(null), 520);
   }
 
   function handleDragEnd(_: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) {
@@ -222,6 +232,11 @@ export function PickerExperience() {
   return (
     <main className="relative min-h-screen overflow-hidden bg-canvas px-5 py-5 text-white">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(255,61,139,0.22),transparent_34rem),radial-gradient(circle_at_92%_28%,rgba(85,230,255,0.14),transparent_24rem)]" />
+      <motion.div
+        aria-hidden="true"
+        style={{opacity: stageGlowOpacity, x: stageGlowX}}
+        className="pointer-events-none absolute inset-y-20 left-1/2 z-0 h-[34rem] w-[34rem] -translate-x-1/2 rounded-full bg-[radial-gradient(circle,rgba(85,230,255,0.22),rgba(255,61,139,0.16)_38%,transparent_70%)] blur-3xl"
+      />
       <nav className="relative z-10 mx-auto flex max-w-md items-center justify-between rounded-full border border-hairline-strong bg-white/[0.035] px-4 py-3 backdrop-blur-xl">
         <button type="button" onClick={saveAndExit} className="text-xs font-semibold text-ink-soft">
           {t('saveAndExit')}
@@ -247,15 +262,37 @@ export function PickerExperience() {
             <motion.div className="h-full rounded-full bg-gradient-to-r from-karaoke to-karaoke-cyan" animate={{width: `${progress}%`}} />
           </div>
 
+          <AnimatePresence>
+            {feedbackMessage ? (
+              <motion.div
+                key={feedbackMessage.id}
+                initial={{opacity: 0, y: 14, scale: 0.92}}
+                animate={{opacity: 1, y: 0, scale: 1}}
+                exit={{opacity: 0, y: -12, scale: 0.96}}
+                transition={{duration: 0.18, ease: 'easeOut'}}
+                className={`pointer-events-none absolute left-1/2 top-28 z-30 -translate-x-1/2 rounded-full border px-4 py-2 text-xs font-black uppercase tracking-[0.2em] shadow-glow backdrop-blur-xl ${
+                  feedbackMessage.tone === 'like' ? 'border-karaoke-cyan/40 bg-karaoke-cyan/20 text-karaoke-cyan' : 'border-karaoke/40 bg-karaoke/20 text-karaoke'
+                }`}
+              >
+                {feedbackMessage.label}
+              </motion.div>
+            ) : null}
+          </AnimatePresence>
+
           <div className="relative h-[28rem]">
             {nextSongs.map((song, index) => (
-              <div
+              <motion.div
                 key={`${song.title}-${song.artist}-stack-${index}`}
                 className="absolute inset-x-4 top-8 rounded-[2rem] border border-hairline-strong bg-surface-card/75 p-6 opacity-60 blur-[0.2px]"
-                style={{transform: `translateY(${(index + 1) * 18}px) scale(${1 - (index + 1) * 0.035})`}}
+                animate={{
+                  y: (index + 1) * deckLift,
+                  scale: 1 - (index + 1) * deckScaleStep,
+                  opacity: deckOpacityBase - index * 0.1
+                }}
+                transition={{type: 'spring', stiffness: 360, damping: 34, mass: 0.75}}
               >
                 <p className="truncate text-xl font-black text-white/60">{song.title}</p>
-              </div>
+              </motion.div>
             ))}
 
             <AnimatePresence custom={swipeDirection}>
@@ -268,7 +305,7 @@ export function PickerExperience() {
                   dragElastic={0.22}
                   onDragStart={() => setIsDragging(true)}
                   onDragEnd={handleDragEnd}
-                  style={{x, rotate, scale}}
+                  style={{x, y: dragLift, rotate, scale, boxShadow: cardGlow}}
                   initial={{opacity: 0, y: 18, scale: 0.98}}
                   animate={{opacity: 1, y: 0, rotate: 0}}
                   exit={{opacity: 0, x: swipeDirection * 460, rotate: swipeDirection * 18, scale: 0.9, transition: {duration: 0.2, ease: 'easeOut'}}}
@@ -474,8 +511,8 @@ function isRawImportDeck(value: string | null): boolean {
   }
 }
 
-function vibrate() {
+function vibrate(pattern: VibratePattern = 10) {
   if ('vibrate' in navigator) {
-    navigator.vibrate(10);
+    navigator.vibrate(pattern);
   }
 }

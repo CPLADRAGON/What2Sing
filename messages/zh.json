@@ -81,6 +81,8 @@
     "gestureHint": "右滑或点 Pick 加入今晚歌单；左滑或点 Skip 暂时跳过。",
     "likeBadge": "Pick",
     "skipBadge": "跳过",
+    "pickedFeedback": "已 Pick",
+    "skippedFeedback": "已跳过",
     "viewPicks": "查看已选歌曲",
     "continueSwiping": "继续筛歌",
     "finishQueue": "完成歌单",

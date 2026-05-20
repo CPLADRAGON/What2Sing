@@ -81,6 +81,8 @@
     "gestureHint": "Swipe right or tap Pick to add it to tonight's list. Swipe left or tap Skip to pass for now.",
     "likeBadge": "Pick",
     "skipBadge": "Skip",
+    "pickedFeedback": "Picked",
+    "skippedFeedback": "Skipped",
     "viewPicks": "View picked songs",
     "continueSwiping": "Continue swiping",
     "finishQueue": "Finish queue",
