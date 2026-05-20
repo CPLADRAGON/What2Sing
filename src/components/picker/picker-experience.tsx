@@ -186,11 +186,12 @@ export function PickerExperience() {
     flushSync(() => setSwipeDirection(exitDirection));
     setFeedbackMessage({label: decision === 'like' ? t('pickedFeedback') : t('skippedFeedback'), tone: decision === 'like' ? 'like' : 'skip', id: Date.now()});
     vibrate(decision === 'like' ? [12, 32, 18] : 12);
-    setState((current) => (current ? chooseCurrentSong(current, decision) : current));
+    const swipeExitDurationMs = 280;
     window.setTimeout(() => {
+      setState((current) => (current ? chooseCurrentSong(current, decision) : current));
       setIsSwipeLocked(false);
       x.set(0);
-    }, 220);
+    }, swipeExitDurationMs);
     window.setTimeout(() => setFeedbackMessage(null), 520);
   }
 
@@ -381,7 +382,7 @@ export function PickerExperience() {
             ))}
 
             <AnimatePresence custom={swipeDirection}>
-              {currentSong && !complete ? (
+              {currentSong && !complete && !isSwipeLocked ? (
                 <motion.article
                   key={`${currentSongKey}-${shuffleAnimationKey}`}
                   custom={swipeDirection}
@@ -419,13 +420,13 @@ export function PickerExperience() {
                     <p className="text-xs leading-5 text-body-muted">{t('gestureHint')}</p>
                   </div>
                 </motion.article>
-              ) : (
+              ) : complete ? (
                 <CompletePanel
                   state={safeState}
                   onSelection={() => setViewMode('selection')}
                   onReswipe={() => setState((current) => (current ? restartWithUnselectedSongs(current, {orderMode: 'random', seed: `${Date.now()}-${current.deck.length}-${current.liked.length}`}) : current))}
                 />
-              )}
+              ) : null}
             </AnimatePresence>
           </div>
 

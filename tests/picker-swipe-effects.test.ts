@@ -28,6 +28,15 @@ describe('physical deck swipe effects', () => {
     expect(source).toContain('swipeDirection * 620');
   });
 
+  it('waits for the outgoing card animation before advancing to the next song', () => {
+    const source = readFileSync('src/components/picker/picker-experience.tsx', 'utf8');
+
+    expect(source).toContain('const swipeExitDurationMs');
+    expect(source).toContain('window.setTimeout(() => {');
+    expect(source).toContain('setState((current) => (current ? chooseCurrentSong(current, decision) : current));');
+    expect(source).toContain('currentSong && !complete && !isSwipeLocked');
+  });
+
   it('offers order controls after resuming saved picking progress', () => {
     const source = readFileSync('src/components/picker/picker-experience.tsx', 'utf8');
 
