@@ -1,10 +1,10 @@
 'use client';
 
-import {AnimatePresence, motion, useMotionValue, useTransform, type PanInfo} from 'framer-motion';
+import {AnimatePresence, animate, motion, useMotionValue, useTransform, type PanInfo} from 'framer-motion';
 import {useLocale, useTranslations} from 'next-intl';
 import Link from 'next/link';
 import {useRouter} from 'next/navigation';
-import {useEffect, useMemo, useState} from 'react';
+import {useEffect, useLayoutEffect, useMemo, useState} from 'react';
 import {flushSync} from 'react-dom';
 import {loadLatestPickerStateForCurrentUser, savePickerStateForCurrentUser} from '@/lib/picker/persistence';
 import {generateSingingOrder, pickRandomSong} from '@/lib/picker/queue';
@@ -128,7 +128,7 @@ export function PickerExperience() {
     return () => window.clearInterval(interval);
   }, [isDragging, isShufflingDeck, isSwipeLocked, needsOrderChoice]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     x.set(0);
     const resetTimer = window.setTimeout(() => {
       setIsDragging(false);
@@ -187,10 +187,10 @@ export function PickerExperience() {
     setFeedbackMessage({label: decision === 'like' ? t('pickedFeedback') : t('skippedFeedback'), tone: decision === 'like' ? 'like' : 'skip', id: Date.now()});
     vibrate(decision === 'like' ? [12, 32, 18] : 12);
     const swipeExitDurationMs = 280;
+    void animate(x, exitDirection * 620, {duration: swipeExitDurationMs / 1000, ease: [0.22, 1, 0.36, 1]});
     window.setTimeout(() => {
       setState((current) => (current ? chooseCurrentSong(current, decision) : current));
       setIsSwipeLocked(false);
-      x.set(0);
     }, swipeExitDurationMs);
     window.setTimeout(() => setFeedbackMessage(null), 520);
   }
@@ -382,7 +382,7 @@ export function PickerExperience() {
             ))}
 
             <AnimatePresence custom={swipeDirection}>
-              {currentSong && !complete && !isSwipeLocked ? (
+              {currentSong && !complete ? (
                 <motion.article
                   key={`${currentSongKey}-${shuffleAnimationKey}`}
                   custom={swipeDirection}
