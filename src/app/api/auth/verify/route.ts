@@ -1,5 +1,6 @@
 import {createClient} from '@supabase/supabase-js';
 import {NextResponse} from 'next/server';
+import {getAuthServerErrorStatus, getSupabaseAuthFailureMessage} from '@/lib/auth/server-errors';
 
 export async function POST(request: Request) {
   const payload = (await request.json().catch(() => null)) as {email?: unknown; token?: unknown} | null;
@@ -16,17 +17,22 @@ export async function POST(request: Request) {
     return NextResponse.json({error: 'Supabase is not configured.'}, {status: 503});
   }
 
-  const {data, error} = await client.auth.verifyOtp({
-    email,
-    token,
-    type: 'email'
-  });
+  try {
+    const {data, error} = await client.auth.verifyOtp({
+      email,
+      token,
+      type: 'email'
+    });
 
-  if (error) {
-    return NextResponse.json({error: error.message}, {status: 400});
+    if (error) {
+      return NextResponse.json({error: error.message}, {status: 400});
+    }
+
+    return NextResponse.json({session: data.session});
+  } catch (error) {
+    console.error('Supabase OTP verification failed', error);
+    return NextResponse.json({error: getSupabaseAuthFailureMessage(error, process.env.NEXT_PUBLIC_SUPABASE_URL)}, {status: getAuthServerErrorStatus(error)});
   }
-
-  return NextResponse.json({session: data.session});
 }
 
 function createAuthClient() {

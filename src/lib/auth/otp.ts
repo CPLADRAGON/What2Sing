@@ -69,5 +69,9 @@ async function readAuthError(response: Response) {
     // Ignore invalid error payloads and use a generic message below.
   }
 
+  if (response.status >= 500) {
+    return 'The login service could not reach Supabase. Please try again, then check Vercel function logs if it continues.';
+  }
+
   return 'Login failed. Please try again.';
 }
