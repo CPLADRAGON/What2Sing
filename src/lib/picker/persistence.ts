@@ -20,6 +20,11 @@ type SupabasePickerSessionRow = {
   updated_at: unknown;
 };
 
+type PersistedSongsPayload = {
+  deck: ImportedSong[];
+  defaultDeck: ImportedSong[];
+};
+
 type RemotePickerSessionResult = {
   state: PickerState;
   id: string;
@@ -60,8 +65,11 @@ export async function loadLatestPickerStateForCurrentUser(): Promise<RemotePicke
 }
 
 export function pickerStateFromSessionRow(row: SupabasePickerSessionRow): PickerState | null {
+  const songsPayload = normalizePersistedSongsPayload(row.songs);
+
   return deserializePickerState(JSON.stringify({
-    deck: row.songs,
+    deck: songsPayload.deck,
+    defaultDeck: songsPayload.defaultDeck,
     currentIndex: row.current_index,
     liked: row.liked,
     skipped: row.skipped,
@@ -88,7 +96,7 @@ export async function saveImportedDeckForCurrentUser(songs: ImportedSong[]): Pro
       user_id: user.id,
       name: 'Imported deck',
       order_mode: 'ordered',
-      songs,
+      songs: {deck: songs, defaultDeck: songs},
       liked: [],
       skipped: [],
       current_index: 0
@@ -121,7 +129,7 @@ export async function savePickerStateForCurrentUser(state: PickerState): Promise
     user_id: user.id,
     name: 'KTV picker session',
     order_mode: state.orderMode,
-    songs: state.deck,
+    songs: {deck: state.deck, defaultDeck: state.defaultDeck},
     liked: state.liked,
     skipped: state.skipped,
     current_index: state.currentIndex,
@@ -149,4 +157,20 @@ export async function savePickerStateForCurrentUser(state: PickerState): Promise
 export function clearStoredPickerSessionIds() {
   window.localStorage.removeItem(SUPABASE_SESSION_ID_KEY);
   window.localStorage.removeItem(PICKER_STORAGE_KEY);
+}
+
+function normalizePersistedSongsPayload(value: unknown): PersistedSongsPayload {
+  if (Array.isArray(value)) {
+    return {deck: value as ImportedSong[], defaultDeck: value as ImportedSong[]};
+  }
+
+  if (value && typeof value === 'object' && 'deck' in value) {
+    const payload = value as Partial<PersistedSongsPayload>;
+    const deck = Array.isArray(payload.deck) ? payload.deck : [];
+    const defaultDeck = Array.isArray(payload.defaultDeck) ? payload.defaultDeck : deck;
+
+    return {deck, defaultDeck};
+  }
+
+  return {deck: [], defaultDeck: []};
 }

@@ -15,6 +15,7 @@ export type RestartWithUnselectedSongsOptions = {
 
 export type PickerState = {
   deck: ImportedSong[];
+  defaultDeck: ImportedSong[];
   currentIndex: number;
   liked: ImportedSong[];
   skipped: ImportedSong[];
@@ -30,6 +31,7 @@ export function createPickerState(songs: ImportedSong[], options: CreatePickerSt
 
   return {
     deck,
+    defaultDeck: songs,
     currentIndex: 0,
     liked: [],
     skipped: [],
@@ -102,7 +104,7 @@ export function deserializePickerState(value: string | null): PickerState | null
       return null;
     }
 
-    return parsed;
+    return normalizePickerState(parsed);
   } catch {
     return null;
   }
@@ -144,6 +146,7 @@ export function appendImportedSongsToPickerState(state: PickerState, songs: Impo
   return {
     ...state,
     deck: [...state.deck, ...newSongs],
+    defaultDeck: [...state.defaultDeck, ...newSongs],
     updatedAt: new Date().toISOString()
   };
 }
@@ -151,7 +154,8 @@ export function appendImportedSongsToPickerState(state: PickerState, songs: Impo
 export function reorderRemainingSongs(state: PickerState, orderMode: PickerOrderMode, seed = 'ktv-picker-resume'): PickerState {
   const completedDeck = state.deck.slice(0, state.currentIndex);
   const remainingDeck = state.deck.slice(state.currentIndex);
-  const deck = orderMode === 'random' ? [...completedDeck, ...shuffleSongs(remainingDeck, seed)] : [...completedDeck, ...remainingDeck];
+  const orderedRemainingDeck = orderSongsByDefaultDeck(remainingDeck, state.defaultDeck);
+  const deck = orderMode === 'random' ? [...completedDeck, ...shuffleSongs(remainingDeck, seed)] : [...completedDeck, ...orderedRemainingDeck];
 
   return {
     ...state,
@@ -163,13 +167,14 @@ export function reorderRemainingSongs(state: PickerState, orderMode: PickerOrder
 
 export function restartWithUnselectedSongs(state: PickerState, options: RestartWithUnselectedSongsOptions = {}): PickerState {
   const pickedKeys = new Set(state.liked.map(getSongKey));
-  const unselectedDeck = state.deck.filter((song) => !pickedKeys.has(getSongKey(song)));
+  const unselectedDeck = state.defaultDeck.filter((song) => !pickedKeys.has(getSongKey(song)));
   const orderMode = options.orderMode ?? 'random';
   const deck = orderMode === 'random' ? shuffleSongs(unselectedDeck, options.seed ?? `${Date.now()}-${unselectedDeck.length}`) : unselectedDeck;
 
   return {
     ...state,
     deck,
+    defaultDeck: unselectedDeck,
     currentIndex: 0,
     orderMode,
     skipped: [],
@@ -224,6 +229,32 @@ function isImportedSong(value: unknown): value is ImportedSong {
   );
 }
 
+function normalizePickerState(state: PickerState): PickerState {
+  return {
+    ...state,
+    defaultDeck: state.defaultDeck ?? state.deck
+  };
+}
+
+function orderSongsByDefaultDeck(songs: ImportedSong[], defaultDeck: ImportedSong[]): ImportedSong[] {
+  const remainingByKey = new Map(songs.map((song) => [getSongKey(song), song]));
+  const orderedSongs: ImportedSong[] = [];
+
+  defaultDeck.forEach((song) => {
+    const key = getSongKey(song);
+    const remainingSong = remainingByKey.get(key);
+
+    if (!remainingSong) {
+      return;
+    }
+
+    orderedSongs.push(remainingSong);
+    remainingByKey.delete(key);
+  });
+
+  return [...orderedSongs, ...Array.from(remainingByKey.values())];
+}
+
 function getSongKey(song: ImportedSong) {
   return `${song.title.trim().toLowerCase()}::${song.artist.trim().toLowerCase()}`;
 }
@@ -238,6 +269,7 @@ function isPickerState(value: unknown): value is PickerState {
   return (
     Array.isArray(state.deck) &&
     state.deck.every(isImportedSong) &&
+    (state.defaultDeck === undefined || (Array.isArray(state.defaultDeck) && state.defaultDeck.every(isImportedSong))) &&
     typeof state.currentIndex === 'number' &&
     Number.isInteger(state.currentIndex) &&
     state.currentIndex >= 0 &&

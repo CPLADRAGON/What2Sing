@@ -20,11 +20,31 @@ describe('picker persistence mapping', () => {
       })
     ).toEqual({
       deck: songs,
+      defaultDeck: songs,
       orderMode: 'random',
       liked: [songs[0]],
       skipped: [],
       currentIndex: 1,
       updatedAt: '2026-05-07T08:12:00.000Z'
+    });
+  });
+
+  it('maps persisted default deck metadata for restoring playlist order', () => {
+    const shuffledSongs = [songs[1], songs[0]];
+
+    expect(
+      pickerStateFromSessionRow({
+        order_mode: 'random',
+        songs: {deck: shuffledSongs, defaultDeck: songs},
+        liked: [],
+        skipped: [],
+        current_index: 0,
+        updated_at: '2026-05-07T08:12:00.000Z'
+      })
+    ).toMatchObject({
+      deck: shuffledSongs,
+      defaultDeck: songs,
+      orderMode: 'random'
     });
   });
 

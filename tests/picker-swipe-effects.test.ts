@@ -34,7 +34,18 @@ describe('physical deck swipe effects', () => {
     expect(source).toContain('reorderRemainingSongs');
     expect(source).toContain('changeRemainingOrder');
     expect(source).toContain("t('resumeOrderTitle')");
-    expect(source).toContain("t('shuffleRemaining')");
+    expect(source).toContain("t('shuffleCards')");
+    expect(source).toContain("t('defaultOrder')");
+  });
+
+  it('animates repeated shuffles and resets the visible card motion when order changes', () => {
+    const source = readFileSync('src/components/picker/picker-experience.tsx', 'utf8');
+
+    expect(source).toContain('shuffleAnimationKey');
+    expect(source).toContain('isShufflingDeck');
+    expect(source).toContain('currentSongKey');
+    expect(source).toContain('setSwipeDirection(0)');
+    expect(source).toContain('setIsDragging(false)');
   });
 
   it('adds richer drag feedback cues beyond the basic stamps', () => {
@@ -52,10 +63,14 @@ describe('physical deck swipe effects', () => {
     expect(en).toContain('pickedFeedback');
     expect(en).toContain('skippedFeedback');
     expect(en).toContain('resumeOrderTitle');
-    expect(en).toContain('shuffleRemaining');
+    expect(en).toContain('shuffleCards');
+    expect(en).toContain('shuffleAgain');
+    expect(en).toContain('defaultOrder');
     expect(zh).toContain('pickedFeedback');
     expect(zh).toContain('skippedFeedback');
     expect(zh).toContain('resumeOrderTitle');
-    expect(zh).toContain('shuffleRemaining');
+    expect(zh).toContain('shuffleCards');
+    expect(zh).toContain('shuffleAgain');
+    expect(zh).toContain('defaultOrder');
   });
 });

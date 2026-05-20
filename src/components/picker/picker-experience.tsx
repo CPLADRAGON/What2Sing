@@ -50,10 +50,13 @@ export function PickerExperience() {
   const [saveMessage, setSaveMessage] = useState('');
   const [isDragging, setIsDragging] = useState(false);
   const [isSwipeLocked, setIsSwipeLocked] = useState(false);
+  const [isShufflingDeck, setIsShufflingDeck] = useState(false);
+  const [shuffleAnimationKey, setShuffleAnimationKey] = useState(0);
   const [feedbackMessage, setFeedbackMessage] = useState<{label: string; tone: 'like' | 'skip'; id: number} | null>(null);
   const loaded = state !== null;
   const safeState = state ?? createPickerState([]);
   const currentSong = getCurrentSong(safeState);
+  const currentSongKey = currentSong ? `${currentSong.title}-${currentSong.artist}-${currentSong.platform}-${safeState.currentIndex}` : 'complete';
   const complete = isPickerComplete(safeState);
   const progress = safeState.deck.length ? Math.min(100, Math.round((safeState.currentIndex / safeState.deck.length) * 100)) : 0;
 
@@ -100,7 +103,7 @@ export function PickerExperience() {
     }
 
     const interval = window.setInterval(() => {
-      if (isDragging || isSwipeLocked) {
+      if (isDragging || isSwipeLocked || isShufflingDeck) {
         return;
       }
 
@@ -123,11 +126,20 @@ export function PickerExperience() {
     }, 15000);
 
     return () => window.clearInterval(interval);
-  }, [isDragging, isSwipeLocked, needsOrderChoice]);
+  }, [isDragging, isShufflingDeck, isSwipeLocked, needsOrderChoice]);
 
   useEffect(() => {
     x.set(0);
-  }, [safeState.currentIndex, x]);
+    const resetTimer = window.setTimeout(() => {
+      setIsDragging(false);
+
+      if (!isSwipeLocked) {
+        setSwipeDirection(0);
+      }
+    }, 0);
+
+    return () => window.clearTimeout(resetTimer);
+  }, [currentSongKey, isSwipeLocked, x]);
 
   useEffect(() => {
     if (!state || needsOrderChoice || state.deck.length === 0) {
@@ -152,7 +164,16 @@ export function PickerExperience() {
   }
 
   function changeRemainingOrder(orderMode: PickerOrderMode) {
-    setState((current) => (current ? reorderRemainingSongs(current, orderMode, `${Date.now()}-${current.currentIndex}-${current.deck.length}`) : current));
+    x.set(0);
+    setSwipeDirection(0);
+    setIsDragging(false);
+    setIsShufflingDeck(orderMode === 'random');
+    setShuffleAnimationKey((current) => current + 1);
+    setState((current) => (current ? reorderRemainingSongs(current, orderMode, `${Date.now()}-${current.currentIndex}-${current.deck.length}-${shuffleAnimationKey}`) : current));
+
+    if (orderMode === 'random') {
+      window.setTimeout(() => setIsShufflingDeck(false), 520);
+    }
   }
 
   function decide(decision: PickerDecision) {
@@ -272,8 +293,8 @@ export function PickerExperience() {
             <motion.div className="h-full rounded-full bg-gradient-to-r from-karaoke to-karaoke-cyan" animate={{width: `${progress}%`}} />
           </div>
 
-          <div className="mb-4 rounded-[1.5rem] border border-white/10 bg-white/[0.035] p-3 backdrop-blur-xl">
-            <div className="mb-2 flex items-center justify-between gap-3">
+          <div className="mb-4 rounded-[1.75rem] border border-white/10 bg-white/[0.04] p-3 shadow-[0_18px_60px_rgba(0,0,0,0.22)] backdrop-blur-xl">
+            <div className="mb-3 flex items-center justify-between gap-3">
               <p className="text-[10px] font-black uppercase tracking-[0.2em] text-body-muted">{t('resumeOrderTitle')}</p>
               <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-karaoke-cyan">{safeState.orderMode}</span>
             </div>
@@ -281,16 +302,26 @@ export function PickerExperience() {
               <button
                 type="button"
                 onClick={() => changeRemainingOrder('ordered')}
-                className={`h-9 rounded-xl text-xs font-black transition ${safeState.orderMode === 'ordered' ? 'bg-white text-canvas' : 'border border-white/10 bg-white/[0.04] text-ink-soft'}`}
+                disabled={isShufflingDeck || isSwipeLocked}
+                className={`h-11 rounded-2xl text-xs font-black transition disabled:opacity-50 ${safeState.orderMode === 'ordered' ? 'bg-white text-canvas' : 'border border-white/10 bg-white/[0.04] text-ink-soft'}`}
               >
-                {t('keepCurrentOrder')}
+                {t('defaultOrder')}
               </button>
               <button
                 type="button"
                 onClick={() => changeRemainingOrder('random')}
-                className={`h-9 rounded-xl text-xs font-black transition ${safeState.orderMode === 'random' ? 'bg-karaoke-cyan text-canvas' : 'border border-karaoke-cyan/25 bg-karaoke-cyan/10 text-karaoke-cyan'}`}
+                disabled={isShufflingDeck || isSwipeLocked}
+                className={`relative h-11 overflow-hidden rounded-2xl text-xs font-black transition disabled:opacity-60 ${safeState.orderMode === 'random' ? 'bg-karaoke-cyan text-canvas shadow-cyan' : 'border border-karaoke-cyan/25 bg-karaoke-cyan/10 text-karaoke-cyan'}`}
               >
-                {t('shuffleRemaining')}
+                <motion.span
+                  key={shuffleAnimationKey}
+                  aria-hidden="true"
+                  initial={{x: '-120%'}}
+                  animate={{x: isShufflingDeck ? '120%' : '-120%'}}
+                  transition={{duration: 0.5, ease: 'easeOut'}}
+                  className="absolute inset-y-0 left-0 w-1/2 skew-x-[-18deg] bg-white/30 blur-sm"
+                />
+                <span className="relative z-10">{safeState.orderMode === 'random' ? t('shuffleAgain') : t('shuffleCards')}</span>
               </button>
             </div>
           </div>
@@ -313,6 +344,20 @@ export function PickerExperience() {
           </AnimatePresence>
 
           <div className="relative h-[28rem]">
+            <AnimatePresence>
+              {isShufflingDeck ? (
+                <motion.div
+                  key={`shuffle-flare-${shuffleAnimationKey}`}
+                  initial={{opacity: 0, scale: 0.92, rotate: -3}}
+                  animate={{opacity: 1, scale: 1, rotate: 0}}
+                  exit={{opacity: 0, scale: 1.04, rotate: 3}}
+                  transition={{duration: 0.32, ease: 'easeOut'}}
+                  className="pointer-events-none absolute inset-x-8 top-5 z-20 rounded-full border border-karaoke-cyan/30 bg-karaoke-cyan/15 px-4 py-2 text-center text-[10px] font-black uppercase tracking-[0.22em] text-karaoke-cyan shadow-cyan backdrop-blur-xl"
+                >
+                  {t('shuffleCards')}
+                </motion.div>
+              ) : null}
+            </AnimatePresence>
             <motion.div
               aria-hidden="true"
               style={{opacity: directionCueOpacity}}
@@ -323,7 +368,9 @@ export function PickerExperience() {
                 key={`${song.title}-${song.artist}-stack-${index}`}
                 className="absolute inset-x-4 top-8 rounded-[2rem] border border-hairline-strong bg-surface-card/75 p-6 opacity-60 blur-[0.2px]"
                 animate={{
-                  y: (index + 1) * deckLift,
+                  y: (index + 1) * deckLift + (isShufflingDeck ? Math.sin(shuffleAnimationKey + index) * 8 : 0),
+                  x: isShufflingDeck ? (index % 2 === 0 ? -12 : 12) : 0,
+                  rotate: isShufflingDeck ? (index % 2 === 0 ? -4 : 4) : 0,
                   scale: 1 - (index + 1) * deckScaleStep,
                   opacity: deckOpacityBase - index * 0.1
                 }}
@@ -336,7 +383,7 @@ export function PickerExperience() {
             <AnimatePresence custom={swipeDirection}>
               {currentSong && !complete ? (
                 <motion.article
-                  key={`${currentSong.title}-${currentSong.artist}-${safeState.currentIndex}`}
+                  key={`${currentSongKey}-${shuffleAnimationKey}`}
                   custom={swipeDirection}
                   drag="x"
                   dragConstraints={{left: 0, right: 0}}
@@ -344,8 +391,8 @@ export function PickerExperience() {
                   onDragStart={() => setIsDragging(true)}
                   onDragEnd={handleDragEnd}
                   style={{x, y: dragLift, rotate, scale, boxShadow: cardGlow}}
-                  initial={{opacity: 0, y: 18, scale: 0.98}}
-                  animate={{opacity: 1, y: 0, rotate: 0}}
+                  initial={{opacity: 0, y: 18, scale: 0.98, rotate: isShufflingDeck ? -4 : 0}}
+                  animate={{opacity: 1, y: 0, rotate: isShufflingDeck ? [0, -3, 3, 0] : 0, scale: isShufflingDeck ? [1, 0.98, 1.02, 1] : 1}}
                   exit={{opacity: 0, x: swipeDirection * 620, y: -48, rotate: swipeDirection * 26, scale: 0.86, transition: {duration: 0.24, ease: [0.22, 1, 0.36, 1]}}}
                   transition={{type: 'spring', stiffness: 420, damping: 28, mass: 0.74}}
                   className="absolute inset-0 flex touch-pan-y cursor-grab flex-col justify-between rounded-[2.25rem] border border-hairline-strong bg-[linear-gradient(145deg,rgba(255,255,255,0.13),rgba(255,255,255,0.035))] p-7 shadow-glow backdrop-blur-xl active:cursor-grabbing"

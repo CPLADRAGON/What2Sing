@@ -184,4 +184,32 @@ describe('picker session', () => {
     expect(reordered.skipped).toEqual(inProgress.skipped);
     expect(reordered.orderMode).toBe('random');
   });
+
+  it('restores default import order for waiting songs after repeated shuffles', () => {
+    const longerDeck: ImportedSong[] = [
+      ...songs,
+      {title: '晴天', artist: '周杰伦', platform: 'qq', tags: []},
+      {title: '勇气', artist: '梁静茹', platform: 'manual', tags: []}
+    ];
+    const inProgress = chooseCurrentSong(chooseCurrentSong(createPickerState(longerDeck), 'like'), 'skip');
+    const firstShuffle = reorderRemainingSongs(inProgress, 'random', 'resume-random-one');
+    const secondShuffle = reorderRemainingSongs(firstShuffle, 'random', 'resume-random-two');
+    const restored = reorderRemainingSongs(secondShuffle, 'ordered');
+
+    expect(restored.deck.slice(0, inProgress.currentIndex)).toEqual(longerDeck.slice(0, inProgress.currentIndex));
+    expect(restored.deck.slice(inProgress.currentIndex)).toEqual(longerDeck.slice(inProgress.currentIndex));
+    expect(restored.currentIndex).toBe(inProgress.currentIndex);
+    expect(restored.liked).toEqual(inProgress.liked);
+    expect(restored.skipped).toEqual(inProgress.skipped);
+    expect(restored.orderMode).toBe('ordered');
+  });
+
+  it('keeps default order metadata when adding songs and serializing progress', () => {
+    const inProgress = chooseCurrentSong(createPickerState(songs), 'like');
+    const manualSong: ImportedSong = {title: '晴天', artist: '周杰伦', platform: 'manual', tags: []};
+    const merged = appendImportedSongsToPickerState(inProgress, [manualSong]);
+    const restored = deserializePickerState(serializePickerState(merged));
+
+    expect(restored?.defaultDeck).toEqual([...songs, manualSong]);
+  });
 });
