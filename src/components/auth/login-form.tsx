@@ -5,8 +5,7 @@ import Link from 'next/link';
 import {useEffect, useState} from 'react';
 import {completeAuthRedirectFromUrl} from '@/lib/auth/callback';
 import {getMagicLinkCooldownSeconds, MAGIC_LINK_COOLDOWN_SECONDS} from '@/lib/auth/cooldown';
-import {verifyEmailOtpCode} from '@/lib/auth/otp';
-import {getAuthRedirectUrl} from '@/lib/auth/redirect';
+import {requestEmailOtp, verifyEmailOtpCode} from '@/lib/auth/otp';
 import {supabase} from '@/lib/supabase';
 
 const MAGIC_LINK_LAST_REQUESTED_KEY = 'ktv-picker:magic-link-requested-at';
@@ -96,16 +95,12 @@ export function LoginForm() {
     setStatus('sending');
     setMessage('');
 
-    const {error} = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        emailRedirectTo: getAuthRedirectUrl(locale, window.location.origin)
-      }
-    });
-
-    if (error) {
+    try {
+      await requestEmailOtp(email.trim(), locale);
+    } catch (error) {
       setStatus('error');
-      const isRateLimited = error.message.toLowerCase().includes('rate limit') || error.message.includes('429');
+      const message = error instanceof Error ? error.message : t('unavailable');
+      const isRateLimited = message.toLowerCase().includes('rate limit') || message.includes('429');
 
       if (isRateLimited) {
         window.localStorage.setItem(MAGIC_LINK_LAST_REQUESTED_KEY, String(Date.now()));
@@ -114,7 +109,7 @@ export function LoginForm() {
         return;
       }
 
-      setMessage(error.message);
+      setMessage(message);
       return;
     }
 

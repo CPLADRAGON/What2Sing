@@ -51,6 +51,7 @@ describe('auth callback completion', () => {
   it('keeps an in-app email code option for iOS Home Screen mode', () => {
     const source = readFileSync('src/components/auth/login-form.tsx', 'utf8');
 
+    expect(source).toContain('requestEmailOtp');
     expect(source).toContain('verifyEmailOtpCode');
     expect(source).toContain('otpCode');
     expect(source).toContain('verifyCode');
