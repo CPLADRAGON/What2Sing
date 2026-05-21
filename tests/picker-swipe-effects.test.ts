@@ -84,6 +84,17 @@ describe('physical deck swipe effects', () => {
     expect(source).toContain('onDrag={handleDrag}');
   });
 
+  it('staggers card content reveal and wobbles the incoming card', () => {
+    const source = readFileSync('src/components/picker/picker-experience.tsx', 'utf8');
+
+    expect(source).toContain("transition={{delay: 0.06");
+    expect(source).toContain("transition={{delay: 0.1");
+    expect(source).toContain("transition={{delay: 0.16");
+    expect(source).toContain("transition={{delay: 0.22");
+    expect(source).toContain('isDealing');
+    expect(source).toContain('rotate: -2');
+  });
+
   it('defines localized feedback copy', () => {
     const en = readFileSync('messages/en.json', 'utf8');
     const zh = readFileSync('messages/zh.json', 'utf8');

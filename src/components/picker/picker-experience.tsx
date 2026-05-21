@@ -151,6 +151,7 @@ export function PickerExperience() {
   }, [needsOrderChoice, state]);
 
   const nextSongs = useMemo(() => safeState.deck.slice(safeState.currentIndex + 1, safeState.currentIndex + 4), [safeState]);
+  const isDealing = isSwipeLocked && !isDragging;
   const deckLift = isDragging ? 12 : 18;
   const deckScaleStep = isDragging ? 0.025 : 0.035;
   const deckOpacityBase = isDragging ? 0.72 : 0.58;
@@ -385,13 +386,14 @@ export function PickerExperience() {
                 key={`${song.title}-${song.artist}-stack-${index}`}
                 className="absolute inset-x-4 top-8 rounded-[2rem] border border-hairline-strong bg-surface-card/75 p-6 opacity-60 blur-[0.2px]"
                 animate={{
-                  y: (index + 1) * deckLift + (isShufflingDeck ? Math.sin(shuffleAnimationKey + index) * 8 : 0),
+                  y: isDealing && index === 0 ? 0 : (index + 1) * deckLift + (isShufflingDeck ? Math.sin(shuffleAnimationKey + index) * 8 : 0),
                   x: isShufflingDeck ? (index % 2 === 0 ? -12 : 12) : 0,
                   rotate: isShufflingDeck ? (index % 2 === 0 ? -4 : 4) : 0,
-                  scale: 1 - (index + 1) * deckScaleStep,
-                  opacity: deckOpacityBase - index * 0.1
+                  scale: isDealing && index === 0 ? 1 : 1 - (index + 1) * deckScaleStep,
+                  opacity: isDealing && index === 0 ? 0.85 : deckOpacityBase - index * 0.1,
+                  filter: isDealing && index === 0 ? 'blur(0px)' : 'blur(0.2px)'
                 }}
-                transition={{type: 'spring', stiffness: 360, damping: 34, mass: 0.75}}
+                transition={{type: 'spring', stiffness: isDealing && index === 0 ? 280 : 360, damping: isDealing && index === 0 ? 26 : 34, mass: 0.75}}
               >
                 <p className="truncate text-xl font-black text-white/60">{song.title}</p>
               </motion.div>
@@ -408,8 +410,8 @@ export function PickerExperience() {
                 onDrag={handleDrag}
                 onDragEnd={handleDragEnd}
                 style={{x, y: dragLift, rotate, scale, boxShadow: cardGlow}}
-                initial={{opacity: 0, y: 36, scale: 0.9}}
-                animate={{opacity: 1, y: 0, rotate: isShufflingDeck ? [0, -3, 3, 0] : 0, scale: isShufflingDeck ? [1, 0.98, 1.02, 1] : 1}}
+                initial={{opacity: 0, y: 36, scale: 0.9, rotate: -2}}
+                animate={{opacity: 1, y: 0, rotate: isShufflingDeck ? [0, -3, 3, 0] : [0, 1.5, -1, 0.5, 0], scale: isShufflingDeck ? [1, 0.98, 1.02, 1] : 1}}
                 exit={{opacity: 0, x: swipeDirection * 620, y: -48, rotate: swipeDirection * 26, scale: 0.86, transition: {duration: 0.24, ease: [0.22, 1, 0.36, 1]}}}
                 transition={{type: 'spring', stiffness: 340, damping: 22, mass: 0.8}}
                 className="absolute inset-0 flex touch-pan-y cursor-grab flex-col justify-between rounded-[2.25rem] border border-hairline-strong bg-[linear-gradient(145deg,rgba(255,255,255,0.13),rgba(255,255,255,0.035))] p-7 shadow-glow backdrop-blur-xl active:cursor-grabbing"
@@ -421,20 +423,43 @@ export function PickerExperience() {
                   {t('likeBadge')}
                 </motion.div>
 
-                <div>
+                <motion.div
+                  initial={{opacity: 0, y: 12}}
+                  animate={{opacity: 1, y: 0}}
+                  transition={{delay: 0.06, duration: 0.3, ease: 'easeOut'}}
+                >
                   <div className="mb-5 flex items-center justify-between">
                     <span className="rounded-full bg-white/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-ink-soft">
                       {currentSong.platform} · {safeState.orderMode}
                     </span>
                     <span className="text-xs text-body-muted">#{safeState.currentIndex + 1}</span>
                   </div>
-                  <h1 className="font-display text-5xl font-black leading-[0.94] tracking-[-0.07em] text-white">{currentSong.title}</h1>
-                  <p className="mt-4 text-lg font-semibold text-karaoke-cyan">{currentSong.artist}</p>
-                </div>
+                  <motion.h1
+                    initial={{opacity: 0, x: -8}}
+                    animate={{opacity: 1, x: 0}}
+                    transition={{delay: 0.1, duration: 0.32, ease: 'easeOut'}}
+                    className="font-display text-5xl font-black leading-[0.94] tracking-[-0.07em] text-white"
+                  >
+                    {currentSong.title}
+                  </motion.h1>
+                  <motion.p
+                    initial={{opacity: 0, x: -6}}
+                    animate={{opacity: 1, x: 0}}
+                    transition={{delay: 0.16, duration: 0.3, ease: 'easeOut'}}
+                    className="mt-4 text-lg font-semibold text-karaoke-cyan"
+                  >
+                    {currentSong.artist}
+                  </motion.p>
+                </motion.div>
 
-                <div className="rounded-[1.5rem] border border-white/10 bg-black/25 p-4">
+                <motion.div
+                  initial={{opacity: 0, y: 10}}
+                  animate={{opacity: 1, y: 0}}
+                  transition={{delay: 0.22, duration: 0.28, ease: 'easeOut'}}
+                  className="rounded-[1.5rem] border border-white/10 bg-black/25 p-4"
+                >
                   <p className="text-xs leading-5 text-body-muted">{t('gestureHint')}</p>
-                </div>
+                </motion.div>
               </motion.article>
             ) : complete ? (
               <CompletePanel

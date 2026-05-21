@@ -3,6 +3,20 @@ import type {ImportedSong} from '@/lib/importers/qq';
 export type PickerDecision = 'like' | 'skip';
 export type PickerOrderMode = 'ordered' | 'random';
 
+export type ImportBatch = {
+  id: string;
+  label: string;
+  platform: ImportedSong['platform'];
+  songCount: number;
+  createdAt: string;
+};
+
+export type AppendResult = {
+  state: PickerState;
+  added: number;
+  duplicatesSkipped: number;
+};
+
 export type CreatePickerStateOptions = {
   orderMode?: PickerOrderMode;
   seed?: string;
@@ -21,6 +35,7 @@ export type PickerState = {
   skipped: ImportedSong[];
   orderMode: PickerOrderMode;
   updatedAt: string;
+  importBatches: ImportBatch[];
 };
 
 export const PICKER_STORAGE_KEY = 'ktv-picker:songs';
@@ -36,7 +51,8 @@ export function createPickerState(songs: ImportedSong[], options: CreatePickerSt
     liked: [],
     skipped: [],
     orderMode,
-    updatedAt: new Date().toISOString()
+    updatedAt: new Date().toISOString(),
+    importBatches: []
   };
 }
 
@@ -130,7 +146,7 @@ export function finishPickerQueue(state: PickerState): PickerState {
   };
 }
 
-export function appendImportedSongsToPickerState(state: PickerState, songs: ImportedSong[]): PickerState {
+export function appendImportedSongsToPickerState(state: PickerState, songs: ImportedSong[], batchLabel?: string): AppendResult {
   const existingKeys = new Set(state.deck.map(getSongKey));
   const newSongs = songs.filter((song) => {
     const key = getSongKey(song);
@@ -143,12 +159,51 @@ export function appendImportedSongsToPickerState(state: PickerState, songs: Impo
     return true;
   });
 
-  return {
-    ...state,
-    deck: [...state.deck, ...newSongs],
-    defaultDeck: [...state.defaultDeck, ...newSongs],
-    updatedAt: new Date().toISOString()
+  const duplicatesSkipped = songs.length - newSongs.length;
+  const platform = newSongs[0]?.platform ?? songs[0]?.platform ?? 'manual';
+  const batch: ImportBatch = {
+    id: `batch-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    label: batchLabel ?? `${platform} import`,
+    platform,
+    songCount: newSongs.length,
+    createdAt: new Date().toISOString()
   };
+
+  return {
+    state: {
+      ...state,
+      deck: [...state.deck, ...newSongs],
+      defaultDeck: [...state.defaultDeck, ...newSongs],
+      importBatches: newSongs.length > 0 ? [...state.importBatches, batch] : state.importBatches,
+      updatedAt: new Date().toISOString()
+    },
+    added: newSongs.length,
+    duplicatesSkipped
+  };
+}
+
+export function createPickerStateFromBatch(state: PickerState, batchId: string, options: CreatePickerStateOptions = {}): PickerState {
+  const batch = state.importBatches.find((b) => b.id === batchId);
+
+  if (!batch) {
+    return state;
+  }
+
+  const batchCreatedAt = Date.parse(batch.createdAt);
+  const batchIndex = state.importBatches.indexOf(batch);
+  const nextBatch = state.importBatches[batchIndex + 1];
+  const nextBatchCreatedAt = nextBatch ? Date.parse(nextBatch.createdAt) : Infinity;
+
+  const batchSongs = state.defaultDeck.filter((_, index) => {
+    const cumulativeBefore = state.importBatches.slice(0, batchIndex).reduce((sum, b) => sum + b.songCount, 0);
+    return index >= cumulativeBefore && index < cumulativeBefore + batch.songCount;
+  });
+
+  if (batchSongs.length === 0) {
+    return state;
+  }
+
+  return createPickerState(batchSongs, options);
 }
 
 export function reorderRemainingSongs(state: PickerState, orderMode: PickerOrderMode, seed = 'ktv-picker-resume'): PickerState {
@@ -232,7 +287,8 @@ function isImportedSong(value: unknown): value is ImportedSong {
 function normalizePickerState(state: PickerState): PickerState {
   return {
     ...state,
-    defaultDeck: state.defaultDeck ?? state.deck
+    defaultDeck: state.defaultDeck ?? state.deck,
+    importBatches: state.importBatches ?? []
   };
 }
 

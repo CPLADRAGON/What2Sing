@@ -25,7 +25,8 @@ describe('picker persistence mapping', () => {
       liked: [songs[0]],
       skipped: [],
       currentIndex: 1,
-      updatedAt: '2026-05-07T08:12:00.000Z'
+      updatedAt: '2026-05-07T08:12:00.000Z',
+      importBatches: []
     });
   });
 

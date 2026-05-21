@@ -10,7 +10,7 @@ import {normalizeSongs} from '@/lib/importers/manual';
 import type {ImportedSong} from '@/lib/importers/qq';
 import {loadLatestPickerStateForCurrentUser, saveImportedDeckForCurrentUser, savePickerStateForCurrentUser} from '@/lib/picker/persistence';
 import {generateSingingOrder, pickRandomSong} from '@/lib/picker/queue';
-import {appendImportedSongsToPickerState, chooseSyncedPickerState, deserializePickerState, PICKER_STORAGE_KEY, serializeImportedSongs, serializePickerState} from '@/lib/picker/session';
+import {appendImportedSongsToPickerState, chooseSyncedPickerState, createPickerState, createPickerStateFromBatch, deserializePickerState, PICKER_STORAGE_KEY, serializeImportedSongs, serializePickerState, type ImportBatch} from '@/lib/picker/session';
 import {supabase} from '@/lib/supabase';
 
 const sampleSongs = '青花瓷 - 周杰伦\n后来 - 刘若英\n修炼爱情 - 林俊杰\n倔强 - 五月天';
@@ -30,11 +30,13 @@ export function LandingExperience() {
   const [message, setMessage] = useState('');
   const [hasSavedProgress, setHasSavedProgress] = useState(false);
   const [savedLikedSongs, setSavedLikedSongs] = useState<ImportedSong[]>([]);
+  const [importBatches, setImportBatches] = useState<ImportBatch[]>([]);
   const [displayName, setDisplayName] = useState<string | null>(null);
   const [showAllSelected, setShowAllSelected] = useState(false);
   const [queueLimit, setQueueLimit] = useState<number | 'all'>('all');
   const [generatedQueue, setGeneratedQueue] = useState<ImportedSong[]>([]);
   const [randomSong, setRandomSong] = useState<ImportedSong | null>(null);
+  const [showImportHistory, setShowImportHistory] = useState(false);
   const steps = t.raw('steps') as string[];
   const loadingSteps = t.raw('loadingSteps') as string[];
 
@@ -58,6 +60,7 @@ export function LandingExperience() {
       window.localStorage.setItem(PICKER_STORAGE_KEY, serializePickerState(savedState));
       setHasSavedProgress(savedState.currentIndex > 0 || savedState.liked.length > 0 || savedState.skipped.length > 0);
       setSavedLikedSongs(savedState.liked);
+      setImportBatches(savedState.importBatches ?? []);
     }
 
     void loadSavedProgress();
@@ -89,6 +92,31 @@ export function LandingExperience() {
 
   function pickLandingRandomSong() {
     setRandomSong(pickRandomSong(savedLikedSongs, `${Date.now()}-${savedLikedSongs.length}`));
+  }
+
+  function handleStartFresh() {
+    window.localStorage.removeItem(PICKER_STORAGE_KEY);
+    setSongs([]);
+    setSavedLikedSongs([]);
+    setImportBatches([]);
+    setHasSavedProgress(false);
+    setGeneratedQueue([]);
+    setRandomSong(null);
+    setStatus('idle');
+    setMessage('');
+  }
+
+  function handlePickBatch(batchId: string) {
+    const localState = deserializePickerState(window.localStorage.getItem(PICKER_STORAGE_KEY));
+
+    if (!localState) {
+      return;
+    }
+
+    const batchState = createPickerStateFromBatch(localState, batchId);
+    window.localStorage.setItem(PICKER_STORAGE_KEY, serializePickerState(batchState));
+    void savePickerStateForCurrentUser(batchState);
+    router.push(`/${locale}/pick`);
   }
 
   async function signOut() {
@@ -139,34 +167,49 @@ export function LandingExperience() {
       }
 
       const nextSongs = [...importedSongs, ...manualSongs];
+      const batchLabel = activeSource === 'manual' ? t('manualBatchLabel') : activeSource === 'spotify' ? 'Spotify' : 'QQ Music';
       const localState = deserializePickerState(window.localStorage.getItem(PICKER_STORAGE_KEY));
       const remoteSession = await loadLatestPickerStateForCurrentUser();
       const savedState = chooseSyncedPickerState(localState, remoteSession?.state ?? null);
       const savedStateHasProgress = savedState ? savedState.currentIndex > 0 || savedState.liked.length > 0 || savedState.skipped.length > 0 : false;
 
       if (savedState?.deck.length) {
-        const mergedState = appendImportedSongsToPickerState(savedState, nextSongs);
+        const result = appendImportedSongsToPickerState(savedState, nextSongs, batchLabel);
 
         if (savedStateHasProgress) {
-          window.localStorage.setItem(PICKER_STORAGE_KEY, serializePickerState(mergedState));
-          void savePickerStateForCurrentUser(mergedState);
+          window.localStorage.setItem(PICKER_STORAGE_KEY, serializePickerState(result.state));
+          void savePickerStateForCurrentUser(result.state);
         } else {
-          window.localStorage.setItem(PICKER_STORAGE_KEY, serializeImportedSongs(mergedState.deck));
-          void saveImportedDeckForCurrentUser(mergedState.deck);
+          window.localStorage.setItem(PICKER_STORAGE_KEY, serializeImportedSongs(result.state.deck));
+          void saveImportedDeckForCurrentUser(result.state.deck);
         }
 
-        setSongs(mergedState.deck);
-        setSavedLikedSongs(mergedState.liked);
+        setSongs(result.state.deck);
+        setSavedLikedSongs(result.state.liked);
+        setImportBatches(result.state.importBatches);
         setHasSavedProgress(savedStateHasProgress);
+        setStatus('done');
+        setMessage(result.duplicatesSkipped > 0
+          ? t('importedWithDuplicates', {added: result.added, skipped: result.duplicatesSkipped, total: result.state.deck.length})
+          : t('importedMerged', {added: result.added, total: result.state.deck.length}));
       } else {
-        window.localStorage.setItem(PICKER_STORAGE_KEY, serializeImportedSongs(nextSongs));
+        const freshState = createPickerState(nextSongs);
+        const batch: ImportBatch = {
+          id: `batch-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          label: batchLabel,
+          platform: nextSongs[0]?.platform ?? 'manual',
+          songCount: nextSongs.length,
+          createdAt: new Date().toISOString()
+        };
+        freshState.importBatches = [batch];
+        window.localStorage.setItem(PICKER_STORAGE_KEY, serializePickerState(freshState));
         void saveImportedDeckForCurrentUser(nextSongs);
         setSongs(nextSongs);
+        setImportBatches([batch]);
         setHasSavedProgress(false);
+        setStatus('done');
+        setMessage(t('imported', {count: nextSongs.length}));
       }
-
-      setStatus('done');
-      setMessage(t('imported', {count: nextSongs.length}));
     } catch (error) {
       setStatus('error');
       setMessage(error instanceof DOMException && error.name === 'AbortError' ? t('timeoutError') : error instanceof Error ? error.message : 'Import failed');
@@ -246,6 +289,32 @@ export function LandingExperience() {
                   {t('viewQueue')}
                 </button>
               </div>
+              <button type="button" onClick={handleStartFresh} className="mt-2 h-10 w-full rounded-2xl border border-karaoke/25 bg-karaoke/10 text-xs font-black text-karaoke transition hover:bg-karaoke/20">
+                {t('startFresh')}
+              </button>
+              {importBatches.length > 0 ? (
+                <div className="mt-3">
+                  <button type="button" onClick={() => setShowImportHistory((v) => !v)} className="flex w-full items-center justify-between text-xs font-black text-ink-soft">
+                    <span>{t('importHistory')} ({importBatches.length})</span>
+                    <span className="text-body-muted">{showImportHistory ? '▲' : '▼'}</span>
+                  </button>
+                  {showImportHistory ? (
+                    <div className="mt-2 space-y-2">
+                      {importBatches.map((batch) => (
+                        <div key={batch.id} className="flex items-center justify-between rounded-2xl border border-white/10 bg-black/20 px-3 py-2">
+                          <div>
+                            <p className="text-xs font-bold text-white">{batch.label}</p>
+                            <p className="text-[10px] text-body-muted">{batch.songCount} {t('batchSongs')} · {batch.platform}</p>
+                          </div>
+                          <button type="button" onClick={() => handlePickBatch(batch.id)} className="rounded-xl border border-karaoke-cyan/25 bg-karaoke-cyan/10 px-3 py-1.5 text-[10px] font-black text-karaoke-cyan">
+                            {t('pickThisList')}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           ) : null}
         </motion.div>
