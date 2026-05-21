@@ -31,15 +31,14 @@ describe('physical deck swipe effects', () => {
   it('flings the outgoing card before advancing to the next song', () => {
     const source = readFileSync('src/components/picker/picker-experience.tsx', 'utf8');
 
-    expect(source).toContain('animate(x, exitDirection * 620');
+    expect(source).toContain('flingRef.current = animate(x, exitDirection * 620');
     expect(source).toContain('const swipeExitDurationMs');
-    expect(source).toContain('window.setTimeout(() => {');
-    expect(source).toContain('x.set(0);');
+    expect(source).toContain('stopFlingAndReset()');
+    expect(source).toContain('flingRef.current.stop()');
     expect(source).toContain('setState((current) => (current ? chooseCurrentSong(current, decision) : current));');
     expect(source).toContain('currentSong && !complete ?');
     expect(source).not.toContain('currentSong && !complete && !isSwipeLocked');
-    expect(source).not.toContain('[currentSongKey, isSwipeLocked, x]');
-    expect(source).not.toContain('<AnimatePresence custom={swipeDirection}>');
+    expect(source).not.toContain('useLayoutEffect');
   });
 
   it('offers order controls after resuming saved picking progress', () => {

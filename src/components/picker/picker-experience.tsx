@@ -4,7 +4,7 @@ import {AnimatePresence, animate, motion, useMotionValue, useTransform, type Pan
 import {useLocale, useTranslations} from 'next-intl';
 import Link from 'next/link';
 import {useRouter} from 'next/navigation';
-import {useEffect, useLayoutEffect, useMemo, useState} from 'react';
+import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {flushSync} from 'react-dom';
 import {loadLatestPickerStateForCurrentUser, savePickerStateForCurrentUser} from '@/lib/picker/persistence';
 import {generateSingingOrder, pickRandomSong} from '@/lib/picker/queue';
@@ -53,6 +53,7 @@ export function PickerExperience() {
   const [isShufflingDeck, setIsShufflingDeck] = useState(false);
   const [shuffleAnimationKey, setShuffleAnimationKey] = useState(0);
   const [feedbackMessage, setFeedbackMessage] = useState<{label: string; tone: 'like' | 'skip'; id: number} | null>(null);
+  const flingRef = useRef<ReturnType<typeof animate> | null>(null);
   const loaded = state !== null;
   const safeState = state ?? createPickerState([]);
   const currentSong = getCurrentSong(safeState);
@@ -128,15 +129,14 @@ export function PickerExperience() {
     return () => window.clearInterval(interval);
   }, [isDragging, isShufflingDeck, isSwipeLocked, needsOrderChoice]);
 
-  useLayoutEffect(() => {
-    x.set(0);
-    const resetTimer = window.setTimeout(() => {
-      setIsDragging(false);
-      setSwipeDirection(0);
-    }, 0);
+  const stopFlingAndReset = useCallback(() => {
+    if (flingRef.current) {
+      flingRef.current.stop();
+      flingRef.current = null;
+    }
 
-    return () => window.clearTimeout(resetTimer);
-  }, [currentSongKey, shuffleAnimationKey, x]);
+    x.set(0);
+  }, [x]);
 
   useEffect(() => {
     if (!state || needsOrderChoice || state.deck.length === 0) {
@@ -161,7 +161,7 @@ export function PickerExperience() {
   }
 
   function changeRemainingOrder(orderMode: PickerOrderMode) {
-    x.set(0);
+    stopFlingAndReset();
     setSwipeDirection(0);
     setIsDragging(false);
     setIsShufflingDeck(orderMode === 'random');
@@ -184,9 +184,9 @@ export function PickerExperience() {
     setFeedbackMessage({label: decision === 'like' ? t('pickedFeedback') : t('skippedFeedback'), tone: decision === 'like' ? 'like' : 'skip', id: Date.now()});
     vibrate(decision === 'like' ? [12, 32, 18] : 12);
     const swipeExitDurationMs = 280;
-    void animate(x, exitDirection * 620, {duration: swipeExitDurationMs / 1000, ease: [0.22, 1, 0.36, 1]});
+    flingRef.current = animate(x, exitDirection * 620, {duration: swipeExitDurationMs / 1000, ease: [0.22, 1, 0.36, 1]});
     window.setTimeout(() => {
-      x.set(0);
+      stopFlingAndReset();
       setState((current) => (current ? chooseCurrentSong(current, decision) : current));
       setIsSwipeLocked(false);
       setSwipeDirection(0);
@@ -207,7 +207,7 @@ export function PickerExperience() {
       return;
     }
 
-    x.set(0);
+    stopFlingAndReset();
   }
 
   function saveAndExit() {
