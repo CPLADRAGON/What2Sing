@@ -45,7 +45,8 @@ describe('landing mobile navigation', () => {
   it('merges newly keyed songs with existing swipe progress instead of overwriting it', () => {
     const source = readFileSync('src/components/landing/landing-experience.tsx', 'utf8');
 
-    expect(source).toContain('appendImportedSongsToPickerState');
+    expect(source).toContain('appendSongsToSession');
+    expect(source).toContain('addSongsToLibrary');
     expect(source).toContain('savePickerStateForCurrentUser');
   });
 

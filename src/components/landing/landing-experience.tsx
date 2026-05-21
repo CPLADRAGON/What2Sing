@@ -10,7 +10,8 @@ import {normalizeSongs} from '@/lib/importers/manual';
 import type {ImportedSong} from '@/lib/importers/qq';
 import {loadLatestPickerStateForCurrentUser, saveImportedDeckForCurrentUser, savePickerStateForCurrentUser} from '@/lib/picker/persistence';
 import {generateSingingOrder, pickRandomSong} from '@/lib/picker/queue';
-import {appendImportedSongsToPickerState, chooseSyncedPickerState, createPickerState, createPickerStateFromBatch, deserializePickerState, PICKER_STORAGE_KEY, serializeImportedSongs, serializePickerState, type ImportBatch} from '@/lib/picker/session';
+import {addSongsToLibrary, createLibrary, deserializeLibrary, getSongsForBatch, LIBRARY_STORAGE_KEY, migrateFromLegacyPickerState, serializeLibrary, type ImportBatch, type SongLibrary} from '@/lib/picker/library';
+import {appendSongsToSession, chooseSyncedPickerState, createPickerState, deserializePickerState, PICKER_STORAGE_KEY, serializePickerState} from '@/lib/picker/session';
 import {supabase} from '@/lib/supabase';
 
 const sampleSongs = '青花瓷 - 周杰伦\n后来 - 刘若英\n修炼爱情 - 林俊杰\n倔强 - 五月天';
@@ -29,8 +30,9 @@ export function LandingExperience() {
   const [status, setStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
   const [message, setMessage] = useState('');
   const [hasSavedProgress, setHasSavedProgress] = useState(false);
-  const [savedLikedSongs, setSavedLikedSongs] = useState<ImportedSong[]>([]);
-  const [importBatches, setImportBatches] = useState<ImportBatch[]>([]);
+  const [library, setLibrary] = useState<SongLibrary | null>(null);
+  const savedLikedSongs = useMemo(() => library?.pickedSongs ?? [], [library]);
+  const importBatches = useMemo(() => library?.batches ?? [], [library]);
   const [displayName, setDisplayName] = useState<string | null>(null);
   const [showAllSelected, setShowAllSelected] = useState(false);
   const [queueLimit, setQueueLimit] = useState<number | 'all'>('all');
@@ -53,14 +55,26 @@ export function LandingExperience() {
       const remoteSession = await loadLatestPickerStateForCurrentUser();
       const savedState = chooseSyncedPickerState(localState, remoteSession?.state ?? null);
 
-      if (!isMounted || !savedState) {
+      if (!isMounted) {
         return;
       }
 
-      window.localStorage.setItem(PICKER_STORAGE_KEY, serializePickerState(savedState));
-      setHasSavedProgress(savedState.currentIndex > 0 || savedState.liked.length > 0 || savedState.skipped.length > 0);
-      setSavedLikedSongs(savedState.liked);
-      setImportBatches(savedState.importBatches ?? []);
+      if (savedState) {
+        window.localStorage.setItem(PICKER_STORAGE_KEY, serializePickerState(savedState));
+        setHasSavedProgress(savedState.currentIndex > 0 || savedState.liked.length > 0 || savedState.skipped.length > 0);
+      }
+
+      let lib = deserializeLibrary(window.localStorage.getItem(LIBRARY_STORAGE_KEY));
+
+      if (!lib && savedState) {
+        const legacyBatches = ((savedState as unknown as Record<string, unknown>).importBatches ?? []) as ImportBatch[];
+        lib = migrateFromLegacyPickerState(savedState.defaultDeck, legacyBatches, savedState.liked);
+        window.localStorage.setItem(LIBRARY_STORAGE_KEY, serializeLibrary(lib));
+      }
+
+      if (lib) {
+        setLibrary(lib);
+      }
     }
 
     void loadSavedProgress();
@@ -97,8 +111,18 @@ export function LandingExperience() {
   function handleStartFresh() {
     window.localStorage.removeItem(PICKER_STORAGE_KEY);
     setSongs([]);
-    setSavedLikedSongs([]);
-    setImportBatches([]);
+    setHasSavedProgress(false);
+    setGeneratedQueue([]);
+    setRandomSong(null);
+    setStatus('idle');
+    setMessage('');
+  }
+
+  function handleClearLibrary() {
+    window.localStorage.removeItem(PICKER_STORAGE_KEY);
+    window.localStorage.removeItem(LIBRARY_STORAGE_KEY);
+    setLibrary(null);
+    setSongs([]);
     setHasSavedProgress(false);
     setGeneratedQueue([]);
     setRandomSong(null);
@@ -107,15 +131,19 @@ export function LandingExperience() {
   }
 
   function handlePickBatch(batchId: string) {
-    const localState = deserializePickerState(window.localStorage.getItem(PICKER_STORAGE_KEY));
-
-    if (!localState) {
+    if (!library) {
       return;
     }
 
-    const batchState = createPickerStateFromBatch(localState, batchId);
-    window.localStorage.setItem(PICKER_STORAGE_KEY, serializePickerState(batchState));
-    void savePickerStateForCurrentUser(batchState);
+    const batchSongs = getSongsForBatch(library, batchId);
+
+    if (batchSongs.length === 0) {
+      return;
+    }
+
+    const freshSession = createPickerState(batchSongs);
+    window.localStorage.setItem(PICKER_STORAGE_KEY, serializePickerState(freshSession));
+    void savePickerStateForCurrentUser(freshSession);
     router.push(`/${locale}/pick`);
   }
 
@@ -168,48 +196,37 @@ export function LandingExperience() {
 
       const nextSongs = [...importedSongs, ...manualSongs];
       const batchLabel = activeSource === 'manual' ? t('manualBatchLabel') : activeSource === 'spotify' ? 'Spotify' : 'QQ Music';
+
+      const currentLib = library ?? createLibrary();
+      const libResult = addSongsToLibrary(currentLib, nextSongs, batchLabel);
+      window.localStorage.setItem(LIBRARY_STORAGE_KEY, serializeLibrary(libResult.library));
+      setLibrary(libResult.library);
+
       const localState = deserializePickerState(window.localStorage.getItem(PICKER_STORAGE_KEY));
       const remoteSession = await loadLatestPickerStateForCurrentUser();
       const savedState = chooseSyncedPickerState(localState, remoteSession?.state ?? null);
       const savedStateHasProgress = savedState ? savedState.currentIndex > 0 || savedState.liked.length > 0 || savedState.skipped.length > 0 : false;
 
-      if (savedState?.deck.length) {
-        const result = appendImportedSongsToPickerState(savedState, nextSongs, batchLabel);
-
-        if (savedStateHasProgress) {
-          window.localStorage.setItem(PICKER_STORAGE_KEY, serializePickerState(result.state));
-          void savePickerStateForCurrentUser(result.state);
-        } else {
-          window.localStorage.setItem(PICKER_STORAGE_KEY, serializeImportedSongs(result.state.deck));
-          void saveImportedDeckForCurrentUser(result.state.deck);
-        }
-
-        setSongs(result.state.deck);
-        setSavedLikedSongs(result.state.liked);
-        setImportBatches(result.state.importBatches);
-        setHasSavedProgress(savedStateHasProgress);
-        setStatus('done');
-        setMessage(result.duplicatesSkipped > 0
-          ? t('importedWithDuplicates', {added: result.added, skipped: result.duplicatesSkipped, total: result.state.deck.length})
-          : t('importedMerged', {added: result.added, total: result.state.deck.length}));
+      if (savedState?.deck.length && savedStateHasProgress) {
+        const updatedSession = appendSongsToSession(savedState, nextSongs);
+        window.localStorage.setItem(PICKER_STORAGE_KEY, serializePickerState(updatedSession));
+        void savePickerStateForCurrentUser(updatedSession);
+        setSongs(updatedSession.deck);
+        setHasSavedProgress(true);
       } else {
-        const freshState = createPickerState(nextSongs);
-        const batch: ImportBatch = {
-          id: `batch-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-          label: batchLabel,
-          platform: nextSongs[0]?.platform ?? 'manual',
-          songCount: nextSongs.length,
-          createdAt: new Date().toISOString()
-        };
-        freshState.importBatches = [batch];
+        const freshState = createPickerState(libResult.library.songs);
         window.localStorage.setItem(PICKER_STORAGE_KEY, serializePickerState(freshState));
-        void saveImportedDeckForCurrentUser(nextSongs);
-        setSongs(nextSongs);
-        setImportBatches([batch]);
+        void saveImportedDeckForCurrentUser(libResult.library.songs);
+        setSongs(libResult.library.songs);
         setHasSavedProgress(false);
-        setStatus('done');
-        setMessage(t('imported', {count: nextSongs.length}));
       }
+
+      setStatus('done');
+      setMessage(libResult.duplicatesSkipped > 0
+        ? t('importedWithDuplicates', {added: libResult.added, skipped: libResult.duplicatesSkipped, total: libResult.library.songs.length})
+        : libResult.added < nextSongs.length || savedState?.deck.length
+          ? t('importedMerged', {added: libResult.added, total: libResult.library.songs.length})
+          : t('imported', {count: nextSongs.length}));
     } catch (error) {
       setStatus('error');
       setMessage(error instanceof DOMException && error.name === 'AbortError' ? t('timeoutError') : error instanceof Error ? error.message : 'Import failed');
@@ -289,9 +306,14 @@ export function LandingExperience() {
                   {t('viewQueue')}
                 </button>
               </div>
-              <button type="button" onClick={handleStartFresh} className="mt-2 h-10 w-full rounded-2xl border border-karaoke/25 bg-karaoke/10 text-xs font-black text-karaoke transition hover:bg-karaoke/20">
-                {t('startFresh')}
-              </button>
+              <div className="mt-2 grid grid-cols-2 gap-2">
+                <button type="button" onClick={handleStartFresh} className="h-10 rounded-2xl border border-karaoke/25 bg-karaoke/10 text-xs font-black text-karaoke transition hover:bg-karaoke/20">
+                  {t('startFresh')}
+                </button>
+                <button type="button" onClick={handleClearLibrary} className="h-10 rounded-2xl border border-white/15 bg-white/[0.04] text-xs font-black text-body-muted transition hover:border-karaoke/30 hover:bg-karaoke/10 hover:text-karaoke">
+                  {t('clearLibrary')}
+                </button>
+              </div>
               {importBatches.length > 0 ? (
                 <div className="mt-3">
                   <button type="button" onClick={() => setShowImportHistory((v) => !v)} className="flex w-full items-center justify-between text-xs font-black text-ink-soft">

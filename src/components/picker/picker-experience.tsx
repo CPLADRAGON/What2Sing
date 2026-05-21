@@ -6,6 +6,8 @@ import Link from 'next/link';
 import {useRouter} from 'next/navigation';
 import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {flushSync} from 'react-dom';
+import {createLibrary, deserializeLibrary, LIBRARY_STORAGE_KEY, removePickedSongFromLibrary, serializeLibrary, syncPickedSongsToLibrary, type SongLibrary} from '@/lib/picker/library';
+import type {ImportedSong} from '@/lib/importers/qq';
 import {loadLatestPickerStateForCurrentUser, savePickerStateForCurrentUser} from '@/lib/picker/persistence';
 import {generateSingingOrder, pickRandomSong} from '@/lib/picker/queue';
 import {
@@ -18,7 +20,6 @@ import {
   getCurrentSong,
   isPickerComplete,
   PICKER_STORAGE_KEY,
-  removeLikedSong,
   reorderRemainingSongs,
   restartWithUnselectedSongs,
   serializePickerState,
@@ -57,6 +58,7 @@ export function PickerExperience() {
   const [feedbackMessage, setFeedbackMessage] = useState<{label: string; tone: 'like' | 'skip'; id: number} | null>(null);
   const flingRef = useRef<ReturnType<typeof animate> | null>(null);
   const lastHapticThreshold = useRef(0);
+  const [library, setLibrary] = useState<SongLibrary | null>(null);
   const loaded = state !== null;
   const safeState = state ?? createPickerState([]);
   const currentSong = getCurrentSong(safeState);
@@ -89,6 +91,19 @@ export function PickerExperience() {
       window.localStorage.setItem(PICKER_STORAGE_KEY, serializePickerState(syncedState));
       setState(syncedState);
       setNeedsOrderChoice(false);
+
+      const rawLib = window.localStorage.getItem(LIBRARY_STORAGE_KEY);
+      let lib = deserializeLibrary(rawLib);
+
+      if (!lib && syncedState.deck.length > 0) {
+        const legacyBatches = (syncedState as PickerState & {importBatches?: unknown[]}).importBatches ?? [];
+        lib = {songs: syncedState.defaultDeck, batches: legacyBatches as SongLibrary['batches'], pickedSongs: syncedState.liked, updatedAt: syncedState.updatedAt};
+        window.localStorage.setItem(LIBRARY_STORAGE_KEY, serializeLibrary(lib));
+      }
+
+      if (lib) {
+        setLibrary(lib);
+      }
     }
 
     void loadSavedProgress();
@@ -148,6 +163,13 @@ export function PickerExperience() {
 
     window.localStorage.setItem(PICKER_STORAGE_KEY, serializePickerState(state));
     void savePickerStateForCurrentUser(state);
+
+    if (state.liked.length > 0) {
+      const rawLib = window.localStorage.getItem(LIBRARY_STORAGE_KEY);
+      const currentLib = deserializeLibrary(rawLib) ?? createLibrary();
+      const updatedLib = syncPickedSongsToLibrary(currentLib, state.liked);
+      window.localStorage.setItem(LIBRARY_STORAGE_KEY, serializeLibrary(updatedLib));
+    }
   }, [needsOrderChoice, state]);
 
   const nextSongs = useMemo(() => safeState.deck.slice(safeState.currentIndex + 1, safeState.currentIndex + 4), [safeState]);
@@ -155,6 +177,33 @@ export function PickerExperience() {
   const deckLift = isDragging ? 12 : 18;
   const deckScaleStep = isDragging ? 0.025 : 0.035;
   const deckOpacityBase = isDragging ? 0.72 : 0.58;
+
+  const allPickedSongs = useMemo(() => {
+    const libPicks = library?.pickedSongs ?? [];
+    const sessionPicks = safeState.liked;
+
+    if (libPicks.length === 0) {
+      return sessionPicks;
+    }
+
+    if (sessionPicks.length === 0) {
+      return libPicks;
+    }
+
+    const existingKeys = new Set(libPicks.map((s) => `${s.title.trim().toLowerCase()}::${s.artist.trim().toLowerCase()}`));
+    const newPicks = sessionPicks.filter((s) => !existingKeys.has(`${s.title.trim().toLowerCase()}::${s.artist.trim().toLowerCase()}`));
+    return [...libPicks, ...newPicks];
+  }, [library, safeState.liked]);
+
+  const hasPickedSongs = allPickedSongs.length > 0;
+
+  function handleRemovePick(indexToRemove: number) {
+    const rawLib = window.localStorage.getItem(LIBRARY_STORAGE_KEY);
+    const currentLib = deserializeLibrary(rawLib) ?? createLibrary();
+    const updatedLib = removePickedSongFromLibrary(currentLib, indexToRemove);
+    window.localStorage.setItem(LIBRARY_STORAGE_KEY, serializeLibrary(updatedLib));
+    setLibrary(updatedLib);
+  }
 
   function chooseMode(orderMode: PickerOrderMode) {
     const nextState = createPickerState(safeState.deck, {orderMode, seed: `${Date.now()}-${safeState.deck.length}`});
@@ -296,8 +345,8 @@ export function PickerExperience() {
 
       {viewMode === 'selection' ? (
         <SelectionPanel
-          state={safeState}
-          onRemove={(index) => setState((current) => (current ? removeLikedSong(current, index) : current))}
+          pickedSongs={allPickedSongs}
+          onRemove={handleRemovePick}
           onContinue={() => setViewMode('swipe')}
           onFinish={() => {
             setState((current) => (current ? finishPickerQueue(current) : current));
@@ -464,8 +513,11 @@ export function PickerExperience() {
             ) : complete ? (
               <CompletePanel
                 state={safeState}
+                pickedSongs={allPickedSongs}
                 onSelection={() => setViewMode('selection')}
-                onReswipe={() => setState((current) => (current ? restartWithUnselectedSongs(current, {orderMode: 'random', seed: `${Date.now()}-${current.deck.length}-${current.liked.length}`}) : current))}
+                onReswipe={() => {
+                  setState((current) => (current ? restartWithUnselectedSongs(current, allPickedSongs, {orderMode: 'random', seed: `${Date.now()}-${current.deck.length}-${allPickedSongs.length}`}) : current));
+                }}
               />
             ) : null}
           </div>
@@ -490,11 +542,11 @@ export function PickerExperience() {
           </div>
           <button
             type="button"
-            onClick={() => setViewMode(canEnterSelectionMode(safeState) ? 'selection' : 'swipe')}
-            disabled={!canEnterSelectionMode(safeState)}
+            onClick={() => setViewMode(hasPickedSongs ? 'selection' : 'swipe')}
+            disabled={!hasPickedSongs}
             className="mt-3 h-12 rounded-2xl border border-karaoke-cyan/25 bg-karaoke-cyan/10 text-sm font-black text-karaoke-cyan transition hover:bg-karaoke-cyan/20 disabled:border-white/10 disabled:bg-white/[0.03] disabled:text-body-muted"
           >
-            {canEnterSelectionMode(safeState) ? t('viewPicks') : t('selectionLocked')}
+            {hasPickedSongs ? t('viewPicks') : t('selectionLocked')}
           </button>
         </section>
       )}
@@ -502,25 +554,25 @@ export function PickerExperience() {
   );
 }
 
-function SelectionPanel({state, onRemove, onContinue, onFinish}: {state: PickerState; onRemove: (index: number) => void; onContinue: () => void; onFinish: () => void}) {
+function SelectionPanel({pickedSongs, onRemove, onContinue, onFinish}: {pickedSongs: ImportedSong[]; onRemove: (index: number) => void; onContinue: () => void; onFinish: () => void}) {
   const t = useTranslations('picker');
   const [queueLimit, setQueueLimit] = useState<number | 'all'>('all');
-  const [singingOrder, setSingingOrder] = useState(state.liked);
-  const [randomSong, setRandomSong] = useState<PickerState['liked'][number] | null>(state.liked[0] ?? null);
+  const [singingOrder, setSingingOrder] = useState(pickedSongs);
+  const [randomSong, setRandomSong] = useState<ImportedSong | null>(pickedSongs[0] ?? null);
 
   function generateQueue() {
-    setSingingOrder(generateSingingOrder(state.liked, {limit: queueLimit, seed: `${Date.now()}-${state.liked.length}`}));
+    setSingingOrder(generateSingingOrder(pickedSongs, {limit: queueLimit, seed: `${Date.now()}-${pickedSongs.length}`}));
     setRandomSong(null);
   }
 
   function chooseRandomSong() {
-    setRandomSong(pickRandomSong(state.liked, `${Date.now()}-${state.liked.length}`));
+    setRandomSong(pickRandomSong(pickedSongs, `${Date.now()}-${pickedSongs.length}`));
   }
 
   return (
     <section className="relative z-10 mx-auto flex min-h-[calc(100vh-6rem)] max-w-md flex-col py-8">
       <div className="rounded-[2rem] border border-hairline-strong bg-surface-card/90 p-6 shadow-cyan backdrop-blur-xl">
-        <p className="text-xs font-bold uppercase tracking-[0.24em] text-karaoke-cyan">{state.liked.length} songs</p>
+        <p className="text-xs font-bold uppercase tracking-[0.24em] text-karaoke-cyan">{pickedSongs.length} songs</p>
         <h1 className="mt-3 font-display text-4xl font-black tracking-[-0.06em]">{t('selectionTitle')}</h1>
         <p className="mt-3 text-sm leading-6 text-body-muted">{t('selectionBody')}</p>
         <div className="mt-5 rounded-[1.5rem] border border-karaoke-cyan/20 bg-karaoke-cyan/10 p-4">
@@ -538,10 +590,10 @@ function SelectionPanel({state, onRemove, onContinue, onFinish}: {state: PickerS
             ))}
           </div>
           <div className="mt-3 grid grid-cols-2 gap-2">
-            <button type="button" onClick={generateQueue} disabled={!state.liked.length} className="h-11 rounded-2xl bg-karaoke-cyan text-xs font-black text-canvas disabled:opacity-40">
+            <button type="button" onClick={generateQueue} disabled={!pickedSongs.length} className="h-11 rounded-2xl bg-karaoke-cyan text-xs font-black text-canvas disabled:opacity-40">
               {t('generateQueue')}
             </button>
-            <button type="button" onClick={chooseRandomSong} disabled={!state.liked.length} className="h-11 rounded-2xl border border-white/10 bg-white/[0.04] text-xs font-black text-ink-soft disabled:opacity-40">
+            <button type="button" onClick={chooseRandomSong} disabled={!pickedSongs.length} className="h-11 rounded-2xl border border-white/10 bg-white/[0.04] text-xs font-black text-ink-soft disabled:opacity-40">
               {t('pickOneRandom')}
             </button>
           </div>
@@ -563,7 +615,8 @@ function SelectionPanel({state, onRemove, onContinue, onFinish}: {state: PickerS
               <button
                 type="button"
                 onClick={() => {
-                  onRemove(state.liked.findIndex((picked) => picked.title === song.title && picked.artist === song.artist));
+                  const libraryIndex = pickedSongs.findIndex((picked) => picked.title === song.title && picked.artist === song.artist);
+                  onRemove(libraryIndex);
                   setSingingOrder((current) => current.filter((queued) => queued.title !== song.title || queued.artist !== song.artist));
                   setRandomSong((current) => (current?.title === song.title && current.artist === song.artist ? null : current));
                 }}
@@ -587,9 +640,9 @@ function SelectionPanel({state, onRemove, onContinue, onFinish}: {state: PickerS
   );
 }
 
-function CompletePanel({state, onSelection, onReswipe}: {state: PickerState; onSelection: () => void; onReswipe: () => void}) {
+function CompletePanel({state, pickedSongs, onSelection, onReswipe}: {state: PickerState; pickedSongs: ImportedSong[]; onSelection: () => void; onReswipe: () => void}) {
   const t = useTranslations('picker');
-  const pickedKeys = new Set(state.liked.map((song) => `${song.title.trim().toLowerCase()}::${song.artist.trim().toLowerCase()}`));
+  const pickedKeys = new Set(pickedSongs.map((song) => `${song.title.trim().toLowerCase()}::${song.artist.trim().toLowerCase()}`));
   const unselectedCount = state.deck.filter((song) => !pickedKeys.has(`${song.title.trim().toLowerCase()}::${song.artist.trim().toLowerCase()}`)).length;
 
   return (
@@ -602,11 +655,11 @@ function CompletePanel({state, onSelection, onReswipe}: {state: PickerState; onS
       <div>
         <p className="text-xs font-bold uppercase tracking-[0.24em] text-karaoke-cyan">{t('completeEyebrow')}</p>
         <h1 className="mt-3 font-display text-4xl font-black tracking-[-0.06em]">{t('completeTitle')}</h1>
-        <p className="mt-3 text-sm leading-6 text-body-muted">{t('completeBody', {count: state.liked.length})}</p>
+        <p className="mt-3 text-sm leading-6 text-body-muted">{t('completeBody', {count: pickedSongs.length})}</p>
         <p className="mt-2 rounded-2xl border border-karaoke-cyan/20 bg-karaoke-cyan/10 px-3 py-2 text-xs leading-5 text-ink-soft">{t('allSwiped')}</p>
       </div>
       <div className="space-y-2 overflow-y-auto">
-        {state.liked.map((song, index) => (
+        {pickedSongs.map((song, index) => (
           <div key={`${song.title}-${index}`} className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
             <p className="text-sm font-bold">{song.title}</p>
             <p className="text-xs text-body-muted">{song.artist}</p>

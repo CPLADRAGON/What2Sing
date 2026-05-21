@@ -1,11 +1,10 @@
 import {describe, expect, it} from 'vitest';
 import {
-  appendImportedSongsToPickerState,
+  appendSongsToSession,
   canEnterSelectionMode,
   chooseCurrentSong,
   chooseSyncedPickerState,
   createPickerState,
-  createPickerStateFromBatch,
   deserializeImportedSongs,
   deserializePickerState,
   finishPickerQueue,
@@ -118,7 +117,7 @@ describe('picker session', () => {
   it('restarts swiping with all unselected songs while keeping picked songs', () => {
     const first = chooseCurrentSong(createPickerState(songs), 'like');
     const second = chooseCurrentSong(first, 'skip');
-    const restarted = restartWithUnselectedSongs(finishPickerQueue(second));
+    const restarted = restartWithUnselectedSongs(finishPickerQueue(second), second.liked);
 
     expect(restarted.deck).toHaveLength(2);
     expect([...restarted.deck].sort((a, b) => a.title.localeCompare(b.title))).toEqual([songs[2], songs[1]].sort((a, b) => a.title.localeCompare(b.title)));
@@ -136,7 +135,7 @@ describe('picker session', () => {
     ];
     const pickedFirst = chooseCurrentSong(createPickerState(longerDeck), 'like');
     const skippedRest = longerDeck.slice(1).reduce((state) => chooseCurrentSong(state, 'skip'), pickedFirst);
-    const restarted = restartWithUnselectedSongs(finishPickerQueue(skippedRest), {orderMode: 'random', seed: 'reswipe-night'});
+    const restarted = restartWithUnselectedSongs(finishPickerQueue(skippedRest), skippedRest.liked, {orderMode: 'random', seed: 'reswipe-night'});
     const originalUnselected = longerDeck.slice(1);
 
     expect(restarted.deck).toHaveLength(originalUnselected.length);
@@ -150,26 +149,22 @@ describe('picker session', () => {
   it('adds manually imported songs without losing current swipe progress', () => {
     const inProgress = chooseCurrentSong(chooseCurrentSong(createPickerState(songs), 'like'), 'skip');
     const manualSong: ImportedSong = {title: '晴天', artist: '周杰伦', platform: 'manual', tags: []};
-    const result = appendImportedSongsToPickerState(inProgress, [manualSong]);
+    const updated = appendSongsToSession(inProgress, [manualSong]);
 
-    expect(result.state.deck).toEqual([...songs, manualSong]);
-    expect(result.state.liked).toEqual([songs[0]]);
-    expect(result.state.skipped).toEqual([songs[1]]);
-    expect(result.state.currentIndex).toBe(2);
-    expect(result.added).toBe(1);
-    expect(result.duplicatesSkipped).toBe(0);
-    expect(getCurrentSong(result.state)).toEqual(songs[2]);
+    expect(updated.deck).toEqual([...songs, manualSong]);
+    expect(updated.liked).toEqual([songs[0]]);
+    expect(updated.skipped).toEqual([songs[1]]);
+    expect(updated.currentIndex).toBe(2);
+    expect(getCurrentSong(updated)).toEqual(songs[2]);
   });
 
   it('does not duplicate songs already in the current swipe deck', () => {
     const inProgress = chooseCurrentSong(createPickerState(songs), 'like');
-    const result = appendImportedSongsToPickerState(inProgress, [songs[1]]);
+    const updated = appendSongsToSession(inProgress, [songs[1]]);
 
-    expect(result.state.deck).toEqual(songs);
-    expect(result.state.currentIndex).toBe(1);
-    expect(result.state.liked).toEqual([songs[0]]);
-    expect(result.added).toBe(0);
-    expect(result.duplicatesSkipped).toBe(1);
+    expect(updated.deck).toEqual(songs);
+    expect(updated.currentIndex).toBe(1);
+    expect(updated.liked).toEqual([songs[0]]);
   });
 
   it('reshuffles only songs still waiting for swiping', () => {
@@ -212,47 +207,9 @@ describe('picker session', () => {
   it('keeps default order metadata when adding songs and serializing progress', () => {
     const inProgress = chooseCurrentSong(createPickerState(songs), 'like');
     const manualSong: ImportedSong = {title: '晴天', artist: '周杰伦', platform: 'manual', tags: []};
-    const result = appendImportedSongsToPickerState(inProgress, [manualSong]);
-    const restored = deserializePickerState(serializePickerState(result.state));
+    const updated = appendSongsToSession(inProgress, [manualSong]);
+    const restored = deserializePickerState(serializePickerState(updated));
 
     expect(restored?.defaultDeck).toEqual([...songs, manualSong]);
-  });
-
-  it('tracks import batches when appending songs', () => {
-    const state = createPickerState(songs);
-    const manualSong: ImportedSong = {title: '晴天', artist: '周杰伦', platform: 'manual', tags: []};
-    const result = appendImportedSongsToPickerState(state, [manualSong], 'Manual paste');
-
-    expect(result.state.importBatches).toHaveLength(1);
-    expect(result.state.importBatches[0].label).toBe('Manual paste');
-    expect(result.state.importBatches[0].songCount).toBe(1);
-    expect(result.state.importBatches[0].platform).toBe('manual');
-  });
-
-  it('does not add a batch entry when all songs are duplicates', () => {
-    const state = createPickerState(songs);
-    const result = appendImportedSongsToPickerState(state, [songs[0]]);
-
-    expect(result.added).toBe(0);
-    expect(result.duplicatesSkipped).toBe(1);
-    expect(result.state.importBatches).toHaveLength(0);
-  });
-
-  it('creates a picker state from a specific import batch', () => {
-    const state = createPickerState(songs);
-    state.importBatches = [{
-      id: 'batch-1',
-      label: 'QQ Music',
-      platform: 'qq',
-      songCount: 3,
-      createdAt: new Date().toISOString()
-    }];
-    const manualSong: ImportedSong = {title: '晴天', artist: '周杰伦', platform: 'manual', tags: []};
-    const appended = appendImportedSongsToPickerState(state, [manualSong], 'Manual paste');
-    const batchState = createPickerStateFromBatch(appended.state, 'batch-1');
-
-    expect(batchState.deck).toEqual(songs);
-    expect(batchState.currentIndex).toBe(0);
-    expect(batchState.liked).toEqual([]);
   });
 });
