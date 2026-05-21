@@ -132,14 +132,11 @@ export function PickerExperience() {
     x.set(0);
     const resetTimer = window.setTimeout(() => {
       setIsDragging(false);
-
-      if (!isSwipeLocked) {
-        setSwipeDirection(0);
-      }
+      setSwipeDirection(0);
     }, 0);
 
     return () => window.clearTimeout(resetTimer);
-  }, [currentSongKey, isSwipeLocked, x]);
+  }, [currentSongKey, shuffleAnimationKey, x]);
 
   useEffect(() => {
     if (!state || needsOrderChoice || state.deck.length === 0) {
@@ -189,8 +186,10 @@ export function PickerExperience() {
     const swipeExitDurationMs = 280;
     void animate(x, exitDirection * 620, {duration: swipeExitDurationMs / 1000, ease: [0.22, 1, 0.36, 1]});
     window.setTimeout(() => {
+      x.set(0);
       setState((current) => (current ? chooseCurrentSong(current, decision) : current));
       setIsSwipeLocked(false);
+      setSwipeDirection(0);
     }, swipeExitDurationMs);
     window.setTimeout(() => setFeedbackMessage(null), 520);
   }
@@ -381,53 +380,51 @@ export function PickerExperience() {
               </motion.div>
             ))}
 
-            <AnimatePresence custom={swipeDirection}>
-              {currentSong && !complete ? (
-                <motion.article
-                  key={`${currentSongKey}-${shuffleAnimationKey}`}
-                  custom={swipeDirection}
-                  drag="x"
-                  dragConstraints={{left: 0, right: 0}}
-                  dragElastic={0.22}
-                  onDragStart={() => setIsDragging(true)}
-                  onDragEnd={handleDragEnd}
-                  style={{x, y: dragLift, rotate, scale, boxShadow: cardGlow}}
-                  initial={{opacity: 0, y: 18, scale: 0.98, rotate: isShufflingDeck ? -4 : 0}}
-                  animate={{opacity: 1, y: 0, rotate: isShufflingDeck ? [0, -3, 3, 0] : 0, scale: isShufflingDeck ? [1, 0.98, 1.02, 1] : 1}}
-                  exit={{opacity: 0, x: swipeDirection * 620, y: -48, rotate: swipeDirection * 26, scale: 0.86, transition: {duration: 0.24, ease: [0.22, 1, 0.36, 1]}}}
-                  transition={{type: 'spring', stiffness: 420, damping: 28, mass: 0.74}}
-                  className="absolute inset-0 flex touch-pan-y cursor-grab flex-col justify-between rounded-[2.25rem] border border-hairline-strong bg-[linear-gradient(145deg,rgba(255,255,255,0.13),rgba(255,255,255,0.035))] p-7 shadow-glow backdrop-blur-xl active:cursor-grabbing"
-                >
-                  <motion.div style={{opacity: skipOpacity, scale: skipScale}} className="pointer-events-none absolute left-6 top-20 rotate-[-10deg] rounded-2xl border-2 border-karaoke bg-karaoke/10 px-4 py-2 text-lg font-black uppercase tracking-[0.18em] text-karaoke shadow-[0_0_30px_rgba(255,61,139,0.28)]">
-                    {t('skipBadge')}
-                  </motion.div>
-                  <motion.div style={{opacity: likeOpacity, scale: likeScale}} className="pointer-events-none absolute right-6 top-20 rotate-[10deg] rounded-2xl border-2 border-karaoke-cyan bg-karaoke-cyan/10 px-4 py-2 text-lg font-black uppercase tracking-[0.18em] text-karaoke-cyan shadow-[0_0_30px_rgba(85,230,255,0.28)]">
-                    {t('likeBadge')}
-                  </motion.div>
+            {currentSong && !complete ? (
+              <motion.article
+                key={`${currentSongKey}-${shuffleAnimationKey}`}
+                custom={swipeDirection}
+                drag="x"
+                dragConstraints={{left: 0, right: 0}}
+                dragElastic={0.22}
+                onDragStart={() => setIsDragging(true)}
+                onDragEnd={handleDragEnd}
+                style={{x, y: dragLift, rotate, scale, boxShadow: cardGlow}}
+                initial={{opacity: 0, y: 18, scale: 0.98, rotate: isShufflingDeck ? -4 : 0}}
+                animate={{opacity: 1, y: 0, rotate: isShufflingDeck ? [0, -3, 3, 0] : 0, scale: isShufflingDeck ? [1, 0.98, 1.02, 1] : 1}}
+                exit={{opacity: 0, x: swipeDirection * 620, y: -48, rotate: swipeDirection * 26, scale: 0.86, transition: {duration: 0.24, ease: [0.22, 1, 0.36, 1]}}}
+                transition={{type: 'spring', stiffness: 420, damping: 28, mass: 0.74}}
+                className="absolute inset-0 flex touch-pan-y cursor-grab flex-col justify-between rounded-[2.25rem] border border-hairline-strong bg-[linear-gradient(145deg,rgba(255,255,255,0.13),rgba(255,255,255,0.035))] p-7 shadow-glow backdrop-blur-xl active:cursor-grabbing"
+              >
+                <motion.div style={{opacity: skipOpacity, scale: skipScale}} className="pointer-events-none absolute left-6 top-20 rotate-[-10deg] rounded-2xl border-2 border-karaoke bg-karaoke/10 px-4 py-2 text-lg font-black uppercase tracking-[0.18em] text-karaoke shadow-[0_0_30px_rgba(255,61,139,0.28)]">
+                  {t('skipBadge')}
+                </motion.div>
+                <motion.div style={{opacity: likeOpacity, scale: likeScale}} className="pointer-events-none absolute right-6 top-20 rotate-[10deg] rounded-2xl border-2 border-karaoke-cyan bg-karaoke-cyan/10 px-4 py-2 text-lg font-black uppercase tracking-[0.18em] text-karaoke-cyan shadow-[0_0_30px_rgba(85,230,255,0.28)]">
+                  {t('likeBadge')}
+                </motion.div>
 
-                  <div>
-                    <div className="mb-5 flex items-center justify-between">
-                      <span className="rounded-full bg-white/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-ink-soft">
-                        {currentSong.platform} · {safeState.orderMode}
-                      </span>
-                      <span className="text-xs text-body-muted">#{safeState.currentIndex + 1}</span>
-                    </div>
-                    <h1 className="font-display text-5xl font-black leading-[0.94] tracking-[-0.07em] text-white">{currentSong.title}</h1>
-                    <p className="mt-4 text-lg font-semibold text-karaoke-cyan">{currentSong.artist}</p>
+                <div>
+                  <div className="mb-5 flex items-center justify-between">
+                    <span className="rounded-full bg-white/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-ink-soft">
+                      {currentSong.platform} · {safeState.orderMode}
+                    </span>
+                    <span className="text-xs text-body-muted">#{safeState.currentIndex + 1}</span>
                   </div>
+                  <h1 className="font-display text-5xl font-black leading-[0.94] tracking-[-0.07em] text-white">{currentSong.title}</h1>
+                  <p className="mt-4 text-lg font-semibold text-karaoke-cyan">{currentSong.artist}</p>
+                </div>
 
-                  <div className="rounded-[1.5rem] border border-white/10 bg-black/25 p-4">
-                    <p className="text-xs leading-5 text-body-muted">{t('gestureHint')}</p>
-                  </div>
-                </motion.article>
-              ) : complete ? (
-                <CompletePanel
-                  state={safeState}
-                  onSelection={() => setViewMode('selection')}
-                  onReswipe={() => setState((current) => (current ? restartWithUnselectedSongs(current, {orderMode: 'random', seed: `${Date.now()}-${current.deck.length}-${current.liked.length}`}) : current))}
-                />
-              ) : null}
-            </AnimatePresence>
+                <div className="rounded-[1.5rem] border border-white/10 bg-black/25 p-4">
+                  <p className="text-xs leading-5 text-body-muted">{t('gestureHint')}</p>
+                </div>
+              </motion.article>
+            ) : complete ? (
+              <CompletePanel
+                state={safeState}
+                onSelection={() => setViewMode('selection')}
+                onReswipe={() => setState((current) => (current ? restartWithUnselectedSongs(current, {orderMode: 'random', seed: `${Date.now()}-${current.deck.length}-${current.liked.length}`}) : current))}
+              />
+            ) : null}
           </div>
 
           <div className="mt-6 grid grid-cols-2 gap-3">

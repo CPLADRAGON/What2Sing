@@ -34,9 +34,12 @@ describe('physical deck swipe effects', () => {
     expect(source).toContain('animate(x, exitDirection * 620');
     expect(source).toContain('const swipeExitDurationMs');
     expect(source).toContain('window.setTimeout(() => {');
+    expect(source).toContain('x.set(0);');
     expect(source).toContain('setState((current) => (current ? chooseCurrentSong(current, decision) : current));');
     expect(source).toContain('currentSong && !complete ?');
     expect(source).not.toContain('currentSong && !complete && !isSwipeLocked');
+    expect(source).not.toContain('[currentSongKey, isSwipeLocked, x]');
+    expect(source).not.toContain('<AnimatePresence custom={swipeDirection}>');
   });
 
   it('offers order controls after resuming saved picking progress', () => {
