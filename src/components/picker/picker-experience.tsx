@@ -32,9 +32,11 @@ export function PickerExperience() {
   const locale = useLocale();
   const router = useRouter();
   const x = useMotionValue(0);
-  const rotate = useTransform(x, [-220, 0, 220], [-16, 0, 16]);
-  const scale = useTransform(x, [-220, 0, 220], [1.04, 1, 1.04]);
-  const dragLift = useTransform(x, [-220, 0, 220], [-10, 0, -10]);
+  const rotate = useTransform(x, [-200, 0, 200], [-24, 0, 24]);
+  const scale = useTransform(x, [-200, 0, 200], [1.08, 1, 1.08]);
+  const dragLift = useTransform(x, [-200, 0, 200], [-22, 0, -22]);
+  const bgWashSkip = useTransform(x, [-180, -30, 0], [0.22, 0, 0]);
+  const bgWashLike = useTransform(x, [0, 30, 180], [0, 0, 0.22]);
   const cardGlow = useTransform(x, [-180, 0, 180], ['0 24px 90px rgba(255,61,139,0.30)', '0 18px 70px rgba(0,0,0,0.35)', '0 24px 90px rgba(85,230,255,0.30)']);
   const stageGlowOpacity = useTransform(x, [-180, 0, 180], [0.5, 0, 0.5]);
   const stageGlowX = useTransform(x, [-180, 0, 180], ['-24%', '0%', '24%']);
@@ -54,6 +56,7 @@ export function PickerExperience() {
   const [shuffleAnimationKey, setShuffleAnimationKey] = useState(0);
   const [feedbackMessage, setFeedbackMessage] = useState<{label: string; tone: 'like' | 'skip'; id: number} | null>(null);
   const flingRef = useRef<ReturnType<typeof animate> | null>(null);
+  const lastHapticThreshold = useRef(0);
   const loaded = state !== null;
   const safeState = state ?? createPickerState([]);
   const currentSong = getCurrentSong(safeState);
@@ -182,7 +185,7 @@ export function PickerExperience() {
     setIsSwipeLocked(true);
     flushSync(() => setSwipeDirection(exitDirection));
     setFeedbackMessage({label: decision === 'like' ? t('pickedFeedback') : t('skippedFeedback'), tone: decision === 'like' ? 'like' : 'skip', id: Date.now()});
-    vibrate(decision === 'like' ? [12, 32, 18] : 12);
+    vibrate(decision === 'like' ? [20, 44, 26, 44, 20] : [14, 22, 10]);
     const swipeExitDurationMs = 280;
     flingRef.current = animate(x, exitDirection * 620, {duration: swipeExitDurationMs / 1000, ease: [0.22, 1, 0.36, 1]});
     window.setTimeout(() => {
@@ -194,8 +197,19 @@ export function PickerExperience() {
     window.setTimeout(() => setFeedbackMessage(null), 520);
   }
 
+  function handleDrag(_: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) {
+    const absX = Math.abs(info.offset.x);
+    const threshold = absX >= 88 ? 88 : absX >= 44 ? 44 : 0;
+
+    if (threshold > lastHapticThreshold.current) {
+      vibrate(threshold === 88 ? [18, 28, 18] : 8);
+      lastHapticThreshold.current = threshold;
+    }
+  }
+
   function handleDragEnd(_: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) {
     setIsDragging(false);
+    lastHapticThreshold.current = 0;
 
     if (info.offset.x > 88 || info.velocity.x > 620) {
       decide('like');
@@ -268,6 +282,8 @@ export function PickerExperience() {
         style={{opacity: stageGlowOpacity, x: stageGlowX}}
         className="pointer-events-none absolute inset-y-20 left-1/2 z-0 h-[34rem] w-[34rem] -translate-x-1/2 rounded-full bg-[radial-gradient(circle,rgba(85,230,255,0.22),rgba(255,61,139,0.16)_38%,transparent_70%)] blur-3xl"
       />
+      <motion.div aria-hidden="true" style={{opacity: bgWashSkip}} className="pointer-events-none absolute inset-0 z-0 bg-[radial-gradient(circle_at_30%_50%,rgba(255,61,139,0.4),transparent_70%)]" />
+      <motion.div aria-hidden="true" style={{opacity: bgWashLike}} className="pointer-events-none absolute inset-0 z-0 bg-[radial-gradient(circle_at_70%_50%,rgba(85,230,255,0.4),transparent_70%)]" />
       <nav className="relative z-10 mx-auto flex max-w-md items-center justify-between rounded-full border border-hairline-strong bg-white/[0.035] px-4 py-3 backdrop-blur-xl">
         <button type="button" onClick={saveAndExit} className="text-xs font-semibold text-ink-soft">
           {t('saveAndExit')}
@@ -326,24 +342,25 @@ export function PickerExperience() {
             </div>
           </div>
 
-          <AnimatePresence>
-            {feedbackMessage ? (
-              <motion.div
-                key={feedbackMessage.id}
-                initial={{opacity: 0, y: 14, scale: 0.92}}
-                animate={{opacity: 1, y: 0, scale: 1}}
-                exit={{opacity: 0, y: -12, scale: 0.96}}
-                transition={{duration: 0.18, ease: 'easeOut'}}
-                className={`pointer-events-none absolute left-1/2 top-28 z-30 -translate-x-1/2 rounded-full border px-4 py-2 text-xs font-black uppercase tracking-[0.2em] shadow-glow backdrop-blur-xl ${
-                  feedbackMessage.tone === 'like' ? 'border-karaoke-cyan/40 bg-karaoke-cyan/20 text-karaoke-cyan' : 'border-karaoke/40 bg-karaoke/20 text-karaoke'
-                }`}
-              >
-                {feedbackMessage.label}
-              </motion.div>
-            ) : null}
-          </AnimatePresence>
-
           <div className="relative h-[28rem]">
+            <AnimatePresence>
+              {feedbackMessage ? (
+                <motion.div
+                  key={feedbackMessage.id}
+                  initial={{opacity: 0, scale: 0.6}}
+                  animate={{opacity: 1, scale: 1}}
+                  exit={{opacity: 0, scale: 0.8}}
+                  transition={{type: 'spring', stiffness: 500, damping: 28}}
+                  className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center"
+                >
+                  <span className={`rounded-2xl border-2 px-8 py-4 text-2xl font-black uppercase tracking-[0.22em] backdrop-blur-xl ${
+                    feedbackMessage.tone === 'like' ? 'border-karaoke-cyan/50 bg-karaoke-cyan/25 text-karaoke-cyan shadow-cyan' : 'border-karaoke/50 bg-karaoke/25 text-karaoke shadow-glow'
+                  }`}>
+                    {feedbackMessage.label}
+                  </span>
+                </motion.div>
+              ) : null}
+            </AnimatePresence>
             <AnimatePresence>
               {isShufflingDeck ? (
                 <motion.div
@@ -386,14 +403,15 @@ export function PickerExperience() {
                 custom={swipeDirection}
                 drag="x"
                 dragConstraints={{left: 0, right: 0}}
-                dragElastic={0.22}
+                dragElastic={0.38}
                 onDragStart={() => setIsDragging(true)}
+                onDrag={handleDrag}
                 onDragEnd={handleDragEnd}
                 style={{x, y: dragLift, rotate, scale, boxShadow: cardGlow}}
-                initial={{opacity: 0, y: 18, scale: 0.98, rotate: isShufflingDeck ? -4 : 0}}
+                initial={{opacity: 0, y: 36, scale: 0.9}}
                 animate={{opacity: 1, y: 0, rotate: isShufflingDeck ? [0, -3, 3, 0] : 0, scale: isShufflingDeck ? [1, 0.98, 1.02, 1] : 1}}
                 exit={{opacity: 0, x: swipeDirection * 620, y: -48, rotate: swipeDirection * 26, scale: 0.86, transition: {duration: 0.24, ease: [0.22, 1, 0.36, 1]}}}
-                transition={{type: 'spring', stiffness: 420, damping: 28, mass: 0.74}}
+                transition={{type: 'spring', stiffness: 340, damping: 22, mass: 0.8}}
                 className="absolute inset-0 flex touch-pan-y cursor-grab flex-col justify-between rounded-[2.25rem] border border-hairline-strong bg-[linear-gradient(145deg,rgba(255,255,255,0.13),rgba(255,255,255,0.035))] p-7 shadow-glow backdrop-blur-xl active:cursor-grabbing"
               >
                 <motion.div style={{opacity: skipOpacity, scale: skipScale}} className="pointer-events-none absolute left-6 top-20 rotate-[-10deg] rounded-2xl border-2 border-karaoke bg-karaoke/10 px-4 py-2 text-lg font-black uppercase tracking-[0.18em] text-karaoke shadow-[0_0_30px_rgba(255,61,139,0.28)]">

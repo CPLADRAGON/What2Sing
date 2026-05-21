@@ -69,6 +69,21 @@ describe('physical deck swipe effects', () => {
     expect(source).toContain('directionCueOpacity');
   });
 
+  it('washes the background with directional color during drag', () => {
+    const source = readFileSync('src/components/picker/picker-experience.tsx', 'utf8');
+
+    expect(source).toContain('bgWashSkip');
+    expect(source).toContain('bgWashLike');
+  });
+
+  it('triggers haptic feedback at drag thresholds', () => {
+    const source = readFileSync('src/components/picker/picker-experience.tsx', 'utf8');
+
+    expect(source).toContain('lastHapticThreshold');
+    expect(source).toContain('handleDrag');
+    expect(source).toContain('onDrag={handleDrag}');
+  });
+
   it('defines localized feedback copy', () => {
     const en = readFileSync('messages/en.json', 'utf8');
     const zh = readFileSync('messages/zh.json', 'utf8');
