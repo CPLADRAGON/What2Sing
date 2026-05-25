@@ -18,12 +18,12 @@ describe('landing mobile navigation', () => {
     expect(source).toContain('getUserDisplayName');
   });
 
-  it('makes the tonight candidates panel interactive', () => {
+  it('makes the library panel interactive', () => {
     const source = readFileSync('src/components/landing/landing-experience.tsx', 'utf8');
 
     expect(source).toContain('generateSingingOrder');
     expect(source).toContain('pickRandomSong');
-    expect(source).toContain('setShowAllSelected');
+    expect(source).toContain('handleDeleteSong');
   });
 
   it('shows logout instead of login for signed-in users', () => {

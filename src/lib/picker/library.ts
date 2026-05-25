@@ -120,6 +120,62 @@ export function removePickedSongFromLibrary(library: SongLibrary, indexToRemove:
   };
 }
 
+export function removeSongFromLibrary(library: SongLibrary, song: ImportedSong): SongLibrary {
+  const key = getSongKey(song);
+  const songIndex = library.songs.findIndex((s) => getSongKey(s) === key);
+
+  if (songIndex === -1) {
+    return library;
+  }
+
+  const updatedBatches: ImportBatch[] = [];
+  let cursor = 0;
+
+  for (const batch of library.batches) {
+    const batchEnd = cursor + batch.songCount;
+
+    if (songIndex >= cursor && songIndex < batchEnd) {
+      const newCount = batch.songCount - 1;
+
+      if (newCount > 0) {
+        updatedBatches.push({...batch, songCount: newCount});
+      }
+    } else {
+      updatedBatches.push(batch);
+    }
+
+    cursor = batchEnd;
+  }
+
+  return {
+    ...library,
+    songs: library.songs.filter((_, i) => i !== songIndex),
+    batches: updatedBatches,
+    pickedSongs: library.pickedSongs.filter((s) => getSongKey(s) !== key),
+    updatedAt: new Date().toISOString()
+  };
+}
+
+export function removeBatchFromLibrary(library: SongLibrary, batchId: string): SongLibrary {
+  const batchIndex = library.batches.findIndex((b) => b.id === batchId);
+
+  if (batchIndex === -1) {
+    return library;
+  }
+
+  const batch = library.batches[batchIndex];
+  const startIndex = library.batches.slice(0, batchIndex).reduce((sum, b) => sum + b.songCount, 0);
+  const removedSongs = new Set(library.songs.slice(startIndex, startIndex + batch.songCount).map(getSongKey));
+
+  return {
+    ...library,
+    songs: library.songs.filter((_, i) => i < startIndex || i >= startIndex + batch.songCount),
+    batches: library.batches.filter((b) => b.id !== batchId),
+    pickedSongs: library.pickedSongs.filter((s) => !removedSongs.has(getSongKey(s))),
+    updatedAt: new Date().toISOString()
+  };
+}
+
 export function getSongsForBatch(library: SongLibrary, batchId: string): ImportedSong[] {
   const batch = library.batches.find((b) => b.id === batchId);
 
