@@ -50,10 +50,6 @@ export function LandingExperience() {
       return [];
     }
 
-    if (libraryFilter === 'picked') {
-      return library.pickedSongs;
-    }
-
     if (libraryFilter !== 'all') {
       return getSongsForBatch(library, libraryFilter);
     }
@@ -510,89 +506,91 @@ export function LandingExperience() {
             {libraryExpanded ? (
               <>
                 {library && (library.songs.length > 0 || savedLikedSongs.length > 0) ? (
-                  <>
-                    <div className="mb-3 flex flex-wrap gap-1.5">
-                      <button type="button" onClick={() => setLibraryFilter('all')} className={`rounded-full px-3 py-1.5 text-[10px] font-black transition ${libraryFilter === 'all' ? 'bg-white text-canvas' : 'border border-white/10 bg-white/[0.04] text-ink-soft'}`}>
-                        {t('libraryFilterAll')}
-                      </button>
-                      {savedLikedSongs.length > 0 ? (
-                        <button type="button" onClick={() => setLibraryFilter('picked')} className={`rounded-full px-3 py-1.5 text-[10px] font-black transition ${libraryFilter === 'picked' ? 'bg-karaoke text-white' : 'border border-karaoke/20 bg-karaoke/10 text-karaoke'}`}>
-                          {t('libraryFilterPicked')} ({savedLikedSongs.length})
-                        </button>
-                      ) : null}
-                      {importBatches.map((batch) => (
-                        <button key={batch.id} type="button" onClick={() => setLibraryFilter(batch.id)} className={`group flex items-center gap-1 rounded-full px-3 py-1.5 text-[10px] font-black transition ${libraryFilter === batch.id ? 'bg-karaoke-cyan text-canvas' : 'border border-white/10 bg-white/[0.04] text-ink-soft'}`}>
-                          <span>{batch.label} · {batch.songCount}</span>
-                          <span role="button" tabIndex={0} onClick={(e) => { e.stopPropagation(); handleDeleteBatch(batch.id); }} onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); handleDeleteBatch(batch.id); } }} className="ml-0.5 hidden rounded-full hover:bg-white/20 group-hover:inline-block">✕</span>
-                        </button>
-                      ))}
-                    </div>
-
+                  <div className="space-y-3">
+                    {/* ── Ready to Sing ── */}
                     {savedLikedSongs.length > 0 ? (
-                      <div className="mb-3 rounded-2xl border border-karaoke-cyan/20 bg-karaoke-cyan/10 p-3">
-                        <p className="text-xs leading-5 text-ink-soft">{t('selectedCount', {count: savedLikedSongs.length})}</p>
-                        <div className="mt-3 grid grid-cols-3 gap-2">
+                      <div className="rounded-2xl border border-karaoke-cyan/25 bg-karaoke-cyan/10 p-3">
+                        <div className="flex items-center justify-between">
+                          <p className="text-xs font-black text-karaoke-cyan">{t('selectedCount', {count: savedLikedSongs.length})}</p>
+                          <div className="flex gap-1.5">
+                            <span className="h-2 w-2 rounded-full bg-karaoke-cyan" />
+                            <span className="h-2 w-2 rounded-full bg-karaoke" />
+                          </div>
+                        </div>
+                        <div className="mt-2.5 grid grid-cols-3 gap-1.5">
                           {(['all', 5, 10] as const).map((limit) => (
-                            <button key={limit} type="button" onClick={() => setQueueLimit(limit)} className={`h-9 rounded-xl text-xs font-black transition ${queueLimit === limit ? 'bg-white text-canvas' : 'border border-white/10 bg-white/[0.04] text-ink-soft'}`}>
+                            <button key={limit} type="button" onClick={() => setQueueLimit(limit)} className={`h-8 rounded-lg text-[10px] font-black transition ${queueLimit === limit ? 'bg-white text-canvas' : 'border border-white/10 bg-white/[0.04] text-ink-soft'}`}>
                               {limit === 'all' ? t('queueLimitAll') : limit}
                             </button>
                           ))}
                         </div>
-                        <div className="mt-3 grid grid-cols-2 gap-2">
-                          <button type="button" onClick={generateLandingQueue} className="h-10 rounded-xl bg-karaoke-cyan text-xs font-black text-canvas">
+                        <div className="mt-2 grid grid-cols-2 gap-1.5">
+                          <button type="button" onClick={generateLandingQueue} className="h-9 rounded-lg bg-karaoke-cyan text-[10px] font-black text-canvas">
                             {t('generateQueue')}
                           </button>
-                          <button type="button" onClick={pickLandingRandomSong} className="h-10 rounded-xl bg-white text-xs font-black text-canvas">
+                          <button type="button" onClick={pickLandingRandomSong} className="h-9 rounded-lg bg-white text-[10px] font-black text-canvas">
                             {t('pickOneRandom')}
                           </button>
                         </div>
                         {randomSong ? (
-                          <div className="mt-3 rounded-2xl border border-karaoke/30 bg-karaoke/10 px-3 py-2">
+                          <div className="mt-2.5 rounded-xl border border-karaoke/30 bg-karaoke/10 px-3 py-2">
                             <p className="text-[10px] font-black uppercase tracking-[0.18em] text-karaoke">{t('nextSong')}</p>
                             <p className="mt-1 text-sm font-black text-white">{randomSong.title}</p>
                             <p className="text-xs text-body-muted">{randomSong.artist}</p>
                           </div>
                         ) : null}
+                        {generatedQueue.length > 0 ? (
+                          <div className="mt-2.5 max-h-[200px] space-y-1.5 overflow-y-auto">
+                            {generatedQueue.map((song, index) => (
+                              <div key={`q-${song.title}-${song.artist}-${index}`} className="flex items-center justify-between rounded-xl border border-karaoke-cyan/15 bg-black/20 px-3 py-2">
+                                <div className="min-w-0 flex-1">
+                                  <p className="text-sm font-bold text-white"><span className="mr-2 text-karaoke-cyan">#{index + 1}</span>{song.title}</p>
+                                  <p className="text-xs text-body-muted">{song.artist}</p>
+                                </div>
+                                <span className="shrink-0 rounded-full bg-white/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] text-ink-soft">{song.platform}</span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
                       </div>
                     ) : null}
 
-                    {generatedQueue.length > 0 ? (
-                      <div className="mb-3 space-y-2">
-                        {generatedQueue.map((song, index) => (
-                          <div key={`q-${song.title}-${song.artist}-${index}`} className="flex items-center justify-between rounded-2xl border border-karaoke-cyan/15 bg-karaoke-cyan/5 px-3 py-3">
-                            <div>
-                              <p className="text-sm font-bold text-white"><span className="mr-2 text-karaoke-cyan">#{index + 1}</span>{song.title}</p>
-                              <p className="text-xs text-body-muted">{song.artist}</p>
-                            </div>
-                            <span className="rounded-full bg-white/10 px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] text-ink-soft">{song.platform}</span>
-                          </div>
-                        ))}
-                      </div>
-                    ) : null}
-
-                    <div className="max-h-[320px] space-y-2 overflow-y-auto">
-                      {filteredLibrarySongs.map((song, index) => (
-                        <div key={`${song.title}-${song.artist}-${index}`} className="group flex items-center justify-between rounded-2xl border border-white/8 bg-white/[0.035] px-3 py-3">
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm font-bold text-white">{song.title}</p>
-                            <p className="text-xs text-body-muted">{song.artist}</p>
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <span className="rounded-full bg-white/10 px-2.5 py-1 text-[10px] uppercase tracking-[0.18em] text-ink-soft">{song.platform}</span>
-                            <button type="button" onClick={() => handleDeleteSong(song)} className="hidden rounded-full border border-karaoke/20 bg-karaoke/10 px-2 py-1 text-[10px] font-black text-karaoke transition hover:bg-karaoke/20 group-hover:block">
-                              {t('libraryDeleteSong')}
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-
+                    {/* ── Imported Songs ── */}
                     {library && library.songs.length > 0 ? (
-                      <button type="button" onClick={() => void handlePickBatch('__all__')} className="mt-3 h-11 w-full rounded-xl bg-karaoke-cyan text-sm font-black text-canvas transition hover:scale-[1.01]">
-                        {t('libraryPickAll')}
-                      </button>
+                      <div className="rounded-2xl border border-white/8 bg-white/[0.025] p-3">
+                        <div className="mb-2.5 flex flex-wrap gap-1.5">
+                          <button type="button" onClick={() => setLibraryFilter('all')} className={`rounded-full px-3 py-1.5 text-[10px] font-black transition ${libraryFilter === 'all' ? 'bg-white text-canvas' : 'border border-white/10 bg-white/[0.04] text-ink-soft'}`}>
+                            {t('libraryFilterAll')} ({library.songs.length})
+                          </button>
+                          {importBatches.map((batch) => (
+                            <button key={batch.id} type="button" onClick={() => setLibraryFilter(batch.id)} className={`group flex items-center gap-1 rounded-full px-3 py-1.5 text-[10px] font-black transition ${libraryFilter === batch.id ? 'bg-karaoke-cyan text-canvas' : 'border border-white/10 bg-white/[0.04] text-ink-soft'}`}>
+                              <span>{batch.label} · {batch.songCount}</span>
+                              <span role="button" tabIndex={0} onClick={(e) => { e.stopPropagation(); handleDeleteBatch(batch.id); }} onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); handleDeleteBatch(batch.id); } }} className="ml-0.5 hidden rounded-full hover:bg-white/20 group-hover:inline-block">✕</span>
+                            </button>
+                          ))}
+                        </div>
+                        <div className="max-h-[280px] space-y-1.5 overflow-y-auto">
+                          {filteredLibrarySongs.map((song, index) => (
+                            <div key={`${song.title}-${song.artist}-${index}`} className="group flex items-center justify-between rounded-xl border border-white/6 bg-white/[0.03] px-3 py-2.5">
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm font-bold text-white">{song.title}</p>
+                                <p className="text-xs text-body-muted">{song.artist}</p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <span className="shrink-0 rounded-full bg-white/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] text-ink-soft">{song.platform}</span>
+                                <button type="button" onClick={() => handleDeleteSong(song)} className="hidden shrink-0 rounded-full border border-karaoke/20 bg-karaoke/10 px-2 py-1 text-[10px] font-black text-karaoke transition hover:bg-karaoke/20 group-hover:block">
+                                  {t('libraryDeleteSong')}
+                                </button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                        <button type="button" onClick={() => void handlePickBatch('__all__')} className="mt-2.5 h-10 w-full rounded-xl bg-karaoke-cyan text-xs font-black text-canvas transition hover:scale-[1.01]">
+                          {t('libraryPickAll')}
+                        </button>
+                      </div>
                     ) : null}
-                  </>
+                  </div>
                 ) : (
                   <p className="text-xs leading-5 text-body-muted">{t('libraryEmpty')}</p>
                 )}
