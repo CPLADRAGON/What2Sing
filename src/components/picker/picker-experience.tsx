@@ -142,9 +142,17 @@ export function PickerExperience() {
         }
 
         setState((current) => {
+          if (!current || current.deck.length === 0) {
+            return current;
+          }
+
           const syncedState = chooseSyncedPickerState(current, remoteSession.state);
 
           if (!syncedState || syncedState === current) {
+            return current;
+          }
+
+          if (syncedState.deck.length === 0 && current.deck.length > 0) {
             return current;
           }
 

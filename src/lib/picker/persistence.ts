@@ -91,17 +91,29 @@ export async function saveImportedDeckForCurrentUser(songs: ImportedSong[]): Pro
     return {saved: false, reason: 'signed-out'};
   }
 
+  const existingId = window.localStorage.getItem(SUPABASE_SESSION_ID_KEY);
+  const payload = {
+    user_id: user.id,
+    name: 'Imported deck',
+    order_mode: 'ordered' as const,
+    songs: {deck: songs, defaultDeck: songs},
+    liked: [] as ImportedSong[],
+    skipped: [] as ImportedSong[],
+    current_index: 0,
+    updated_at: new Date().toISOString()
+  };
+
+  if (existingId) {
+    const {error} = await supabase.from('picker_sessions').update(payload).eq('id', existingId).eq('user_id', user.id);
+
+    if (!error) {
+      return {saved: true, id: existingId};
+    }
+  }
+
   const {data, error} = await supabase
     .from('picker_sessions')
-    .insert({
-      user_id: user.id,
-      name: 'Imported deck',
-      order_mode: 'ordered',
-      songs: {deck: songs, defaultDeck: songs},
-      liked: [],
-      skipped: [],
-      current_index: 0
-    })
+    .insert(payload)
     .select('id')
     .single();
 
