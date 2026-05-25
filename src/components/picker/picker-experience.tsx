@@ -8,7 +8,7 @@ import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {flushSync} from 'react-dom';
 import {createLibrary, deserializeLibrary, LIBRARY_STORAGE_KEY, removePickedSongFromLibrary, serializeLibrary, syncPickedSongsToLibrary, type SongLibrary} from '@/lib/picker/library';
 import type {ImportedSong} from '@/lib/importers/qq';
-import {loadLatestPickerStateForCurrentUser, savePickerStateForCurrentUser} from '@/lib/picker/persistence';
+import {chooseSyncedLibrary, loadLatestPickerStateForCurrentUser, loadLibraryForCurrentUser, saveLibraryForCurrentUser, savePickerStateForCurrentUser} from '@/lib/picker/persistence';
 import {generateSingingOrder, pickRandomSong} from '@/lib/picker/queue';
 import {
   canEnterSelectionMode,
@@ -84,6 +84,15 @@ export function PickerExperience() {
       const remoteSession = await loadLatestPickerStateForCurrentUser();
 
       if (!isMounted || !remoteSession) {
+        if (isMounted) {
+          const rawLib = window.localStorage.getItem(LIBRARY_STORAGE_KEY);
+          const lib = deserializeLibrary(rawLib);
+
+          if (lib) {
+            setLibrary(lib);
+          }
+        }
+
         return;
       }
 
@@ -92,16 +101,17 @@ export function PickerExperience() {
       setState(syncedState);
       setNeedsOrderChoice(false);
 
-      const rawLib = window.localStorage.getItem(LIBRARY_STORAGE_KEY);
-      let lib = deserializeLibrary(rawLib);
+      const localLib = deserializeLibrary(window.localStorage.getItem(LIBRARY_STORAGE_KEY));
+      const remoteLib = await loadLibraryForCurrentUser();
+      let lib = chooseSyncedLibrary(localLib, remoteLib);
 
       if (!lib && syncedState.deck.length > 0) {
         const legacyBatches = (syncedState as PickerState & {importBatches?: unknown[]}).importBatches ?? [];
         lib = {songs: syncedState.defaultDeck, batches: legacyBatches as SongLibrary['batches'], pickedSongs: syncedState.liked, updatedAt: syncedState.updatedAt};
-        window.localStorage.setItem(LIBRARY_STORAGE_KEY, serializeLibrary(lib));
       }
 
       if (lib) {
+        window.localStorage.setItem(LIBRARY_STORAGE_KEY, serializeLibrary(lib));
         setLibrary(lib);
       }
     }
@@ -169,6 +179,7 @@ export function PickerExperience() {
       const currentLib = deserializeLibrary(rawLib) ?? createLibrary();
       const updatedLib = syncPickedSongsToLibrary(currentLib, state.liked);
       window.localStorage.setItem(LIBRARY_STORAGE_KEY, serializeLibrary(updatedLib));
+      void saveLibraryForCurrentUser(updatedLib);
     }
   }, [needsOrderChoice, state]);
 
@@ -203,6 +214,26 @@ export function PickerExperience() {
     const updatedLib = removePickedSongFromLibrary(currentLib, indexToRemove);
     window.localStorage.setItem(LIBRARY_STORAGE_KEY, serializeLibrary(updatedLib));
     setLibrary(updatedLib);
+    void saveLibraryForCurrentUser(updatedLib);
+
+    const removedSong = currentLib.pickedSongs[indexToRemove];
+
+    if (removedSong) {
+      setState((current) => {
+        if (!current) {
+          return current;
+        }
+
+        const removedKey = `${removedSong.title.trim().toLowerCase()}::${removedSong.artist.trim().toLowerCase()}`;
+        const filteredLiked = current.liked.filter((s) => `${s.title.trim().toLowerCase()}::${s.artist.trim().toLowerCase()}` !== removedKey);
+
+        if (filteredLiked.length === current.liked.length) {
+          return current;
+        }
+
+        return {...current, liked: filteredLiked, updatedAt: new Date().toISOString()};
+      });
+    }
   }
 
   function chooseMode(orderMode: PickerOrderMode) {

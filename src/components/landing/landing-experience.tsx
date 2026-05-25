@@ -8,7 +8,7 @@ import {useEffect, useMemo, useState} from 'react';
 import {getUserDisplayName} from '@/lib/auth/profile';
 import {normalizeSongs} from '@/lib/importers/manual';
 import type {ImportedSong} from '@/lib/importers/qq';
-import {loadLatestPickerStateForCurrentUser, saveImportedDeckForCurrentUser, savePickerStateForCurrentUser} from '@/lib/picker/persistence';
+import {loadLatestPickerStateForCurrentUser, saveImportedDeckForCurrentUser, saveLibraryForCurrentUser, savePickerStateForCurrentUser, chooseSyncedLibrary, loadLibraryForCurrentUser} from '@/lib/picker/persistence';
 import {generateSingingOrder, pickRandomSong} from '@/lib/picker/queue';
 import {addSongsToLibrary, createLibrary, deserializeLibrary, getSongsForBatch, LIBRARY_STORAGE_KEY, migrateFromLegacyPickerState, quickAddPickedSong, serializeLibrary, type ImportBatch, type SongLibrary} from '@/lib/picker/library';
 import {appendSongsToSession, chooseSyncedPickerState, createPickerState, deserializePickerState, PICKER_STORAGE_KEY, serializePickerState} from '@/lib/picker/session';
@@ -67,15 +67,17 @@ export function LandingExperience() {
         setHasSavedProgress(savedState.currentIndex > 0 || savedState.liked.length > 0 || savedState.skipped.length > 0);
       }
 
-      let lib = deserializeLibrary(window.localStorage.getItem(LIBRARY_STORAGE_KEY));
+      const localLib = deserializeLibrary(window.localStorage.getItem(LIBRARY_STORAGE_KEY));
+      const remoteLib = await loadLibraryForCurrentUser();
+      let lib = chooseSyncedLibrary(localLib, remoteLib);
 
       if (!lib && savedState) {
         const legacyBatches = ((savedState as unknown as Record<string, unknown>).importBatches ?? []) as ImportBatch[];
         lib = migrateFromLegacyPickerState(savedState.defaultDeck, legacyBatches, savedState.liked);
-        window.localStorage.setItem(LIBRARY_STORAGE_KEY, serializeLibrary(lib));
       }
 
       if (lib) {
+        window.localStorage.setItem(LIBRARY_STORAGE_KEY, serializeLibrary(lib));
         setLibrary(lib);
       }
     }
@@ -130,6 +132,7 @@ export function LandingExperience() {
 
     window.localStorage.setItem(LIBRARY_STORAGE_KEY, serializeLibrary(result.library));
     setLibrary(result.library);
+    void saveLibraryForCurrentUser(result.library);
     setQuickAddTitle('');
     setQuickAddArtist('');
     setQuickAddMessage(t('quickAddSuccess', {title}));
@@ -148,6 +151,8 @@ export function LandingExperience() {
   function handleClearLibrary() {
     window.localStorage.removeItem(PICKER_STORAGE_KEY);
     window.localStorage.removeItem(LIBRARY_STORAGE_KEY);
+    const emptyLib = {songs: [], batches: [], pickedSongs: [], updatedAt: new Date().toISOString()};
+    void saveLibraryForCurrentUser(emptyLib);
     setLibrary(null);
     setSongs([]);
     setHasSavedProgress(false);
@@ -157,7 +162,7 @@ export function LandingExperience() {
     setMessage('');
   }
 
-  function handlePickBatch(batchId: string) {
+  async function handlePickBatch(batchId: string) {
     if (!library) {
       return;
     }
@@ -170,7 +175,7 @@ export function LandingExperience() {
 
     const freshSession = createPickerState(batchSongs);
     window.localStorage.setItem(PICKER_STORAGE_KEY, serializePickerState(freshSession));
-    void savePickerStateForCurrentUser(freshSession);
+    await savePickerStateForCurrentUser(freshSession);
     router.push(`/${locale}/pick`);
   }
 
@@ -228,6 +233,7 @@ export function LandingExperience() {
       const libResult = addSongsToLibrary(currentLib, nextSongs, batchLabel);
       window.localStorage.setItem(LIBRARY_STORAGE_KEY, serializeLibrary(libResult.library));
       setLibrary(libResult.library);
+      void saveLibraryForCurrentUser(libResult.library);
 
       const localState = deserializePickerState(window.localStorage.getItem(PICKER_STORAGE_KEY));
       const remoteSession = await loadLatestPickerStateForCurrentUser();
@@ -237,13 +243,13 @@ export function LandingExperience() {
       if (savedState?.deck.length && savedStateHasProgress) {
         const updatedSession = appendSongsToSession(savedState, nextSongs);
         window.localStorage.setItem(PICKER_STORAGE_KEY, serializePickerState(updatedSession));
-        void savePickerStateForCurrentUser(updatedSession);
+        await savePickerStateForCurrentUser(updatedSession);
         setSongs(updatedSession.deck);
         setHasSavedProgress(true);
       } else {
         const freshState = createPickerState(libResult.library.songs);
         window.localStorage.setItem(PICKER_STORAGE_KEY, serializePickerState(freshState));
-        void saveImportedDeckForCurrentUser(libResult.library.songs);
+        await saveImportedDeckForCurrentUser(libResult.library.songs);
         setSongs(libResult.library.songs);
         setHasSavedProgress(false);
       }

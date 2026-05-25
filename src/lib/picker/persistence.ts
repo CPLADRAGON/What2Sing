@@ -1,5 +1,6 @@
 import type {ImportedSong} from '@/lib/importers/qq';
 import {supabase} from '@/lib/supabase';
+import {deserializeLibrary, LIBRARY_STORAGE_KEY, serializeLibrary, type SongLibrary} from './library';
 import {deserializePickerState, PICKER_STORAGE_KEY, type PickerState} from './session';
 
 const SUPABASE_SESSION_ID_KEY = 'ktv-picker:supabase-session-id';
@@ -157,6 +158,79 @@ export async function savePickerStateForCurrentUser(state: PickerState): Promise
 export function clearStoredPickerSessionIds() {
   window.localStorage.removeItem(SUPABASE_SESSION_ID_KEY);
   window.localStorage.removeItem(PICKER_STORAGE_KEY);
+}
+
+export async function loadLibraryForCurrentUser(): Promise<SongLibrary | null> {
+  if (!supabase) {
+    return null;
+  }
+
+  const {data: sessionData} = await supabase.auth.getSession();
+  const user = sessionData.session?.user;
+
+  if (!user) {
+    return null;
+  }
+
+  const {data, error} = await supabase
+    .from('song_libraries')
+    .select('songs, batches, picked_songs, updated_at')
+    .eq('user_id', user.id)
+    .maybeSingle();
+
+  if (error || !data) {
+    return null;
+  }
+
+  return deserializeLibrary(JSON.stringify({
+    songs: data.songs,
+    batches: data.batches,
+    pickedSongs: data.picked_songs,
+    updatedAt: data.updated_at
+  }));
+}
+
+export async function saveLibraryForCurrentUser(library: SongLibrary): Promise<PersistenceResult> {
+  if (!supabase) {
+    return {saved: false, reason: 'missing-client'};
+  }
+
+  const {data: sessionData} = await supabase.auth.getSession();
+  const user = sessionData.session?.user;
+
+  if (!user) {
+    return {saved: false, reason: 'signed-out'};
+  }
+
+  const payload = {
+    user_id: user.id,
+    songs: library.songs,
+    batches: library.batches,
+    picked_songs: library.pickedSongs,
+    updated_at: new Date().toISOString()
+  };
+
+  const {error} = await supabase
+    .from('song_libraries')
+    .upsert(payload, {onConflict: 'user_id'});
+
+  if (error) {
+    return {saved: false, reason: 'database-error'};
+  }
+
+  return {saved: true};
+}
+
+export function chooseSyncedLibrary(localLib: SongLibrary | null, remoteLib: SongLibrary | null): SongLibrary | null {
+  if (!localLib) {
+    return remoteLib;
+  }
+
+  if (!remoteLib) {
+    return localLib;
+  }
+
+  return Date.parse(remoteLib.updatedAt) > Date.parse(localLib.updatedAt) ? remoteLib : localLib;
 }
 
 function normalizePersistedSongsPayload(value: unknown): PersistedSongsPayload {

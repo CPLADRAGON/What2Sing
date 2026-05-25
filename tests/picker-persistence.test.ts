@@ -1,6 +1,7 @@
 import {describe, expect, it} from 'vitest';
-import {pickerStateFromSessionRow} from '@/lib/picker/persistence';
+import {chooseSyncedLibrary, pickerStateFromSessionRow} from '@/lib/picker/persistence';
 import type {ImportedSong} from '@/lib/importers/qq';
+import type {SongLibrary} from '@/lib/picker/library';
 
 const songs: ImportedSong[] = [
   {title: '稻香', artist: '周杰伦', platform: 'qq', tags: []},
@@ -59,5 +60,31 @@ describe('picker persistence mapping', () => {
         updated_at: '2026-05-07T08:12:00.000Z'
       })
     ).toBeNull();
+  });
+});
+
+describe('library sync', () => {
+  const baseLibrary: SongLibrary = {
+    songs,
+    batches: [],
+    pickedSongs: [songs[0]],
+    updatedAt: '2026-05-07T08:00:00.000Z'
+  };
+
+  it('chooses the newest library when syncing local and remote', () => {
+    const older = {...baseLibrary, updatedAt: '2026-05-07T08:00:00.000Z'};
+    const newer = {...baseLibrary, pickedSongs: songs, updatedAt: '2026-05-07T08:05:00.000Z'};
+
+    expect(chooseSyncedLibrary(older, newer)).toBe(newer);
+    expect(chooseSyncedLibrary(newer, older)).toBe(newer);
+  });
+
+  it('returns the available library when only one exists', () => {
+    expect(chooseSyncedLibrary(baseLibrary, null)).toBe(baseLibrary);
+    expect(chooseSyncedLibrary(null, baseLibrary)).toBe(baseLibrary);
+  });
+
+  it('returns null when both are missing', () => {
+    expect(chooseSyncedLibrary(null, null)).toBeNull();
   });
 });
