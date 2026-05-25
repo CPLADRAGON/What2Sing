@@ -585,8 +585,8 @@ export function LandingExperience() {
                             </div>
                           ))}
                         </div>
-                        <button type="button" onClick={() => void handlePickBatch('__all__')} className="mt-2.5 h-10 w-full rounded-xl bg-karaoke-cyan text-xs font-black text-canvas transition hover:scale-[1.01]">
-                          {t('libraryPickAll')}
+                        <button type="button" onClick={() => void handlePickBatch(libraryFilter === 'all' ? '__all__' : libraryFilter)} className="mt-2.5 h-10 w-full rounded-xl bg-karaoke-cyan text-xs font-black text-canvas transition hover:scale-[1.01]">
+                          {libraryFilter === 'all' ? t('libraryPickAll') : t('pickThisList')} ({filteredLibrarySongs.length})
                         </button>
                       </div>
                     ) : null}
@@ -600,13 +600,7 @@ export function LandingExperience() {
         </motion.div>
       </section>
 
-      <section className="relative z-10 mx-auto grid max-w-6xl gap-3 pb-8 sm:grid-cols-3">
-        {(['import', 'swipe', 'realtime'] as const).map((feature) => (
-          <div key={feature} className="rounded-3xl border border-hairline-strong bg-white/[0.03] p-5 text-sm font-semibold text-ink-soft backdrop-blur">
-            {t(`features.${feature}`)}
-          </div>
-        ))}
-      </section>
+
       {showSourcePicker ? (
         <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 px-5 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-[2rem] border border-hairline-strong bg-surface-card p-5 shadow-glow">
