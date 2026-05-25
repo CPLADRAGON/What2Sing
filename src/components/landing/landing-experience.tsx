@@ -447,24 +447,24 @@ export function LandingExperience() {
 
           <div className="mt-4 rounded-[1.5rem] border border-white/10 bg-surface-elevated p-4 sm:p-5">
             <p className="text-sm font-semibold text-ink-soft">{t('quickAddTitle')}</p>
-            <div className="mt-2 flex gap-2">
+            <div className="mt-2 grid grid-cols-[1fr_auto] gap-2 sm:grid-cols-[1fr_1fr_auto]">
               <input
                 value={quickAddTitle}
                 onChange={(event) => setQuickAddTitle(event.target.value)}
                 placeholder={t('quickAddTitlePlaceholder')}
-                className="h-10 min-w-0 flex-1 rounded-xl border border-hairline-strong bg-black/35 px-3 text-sm text-white outline-none transition placeholder:text-body-muted focus:border-karaoke-cyan/70"
+                className="h-10 min-w-0 rounded-xl border border-hairline-strong bg-black/35 px-3 text-sm text-white outline-none transition placeholder:text-body-muted focus:border-karaoke-cyan/70 sm:col-span-1"
               />
               <input
                 value={quickAddArtist}
                 onChange={(event) => setQuickAddArtist(event.target.value)}
                 placeholder={t('quickAddArtistPlaceholder')}
-                className="h-10 min-w-0 flex-1 rounded-xl border border-hairline-strong bg-black/35 px-3 text-sm text-white outline-none transition placeholder:text-body-muted focus:border-karaoke-cyan/70"
+                className="col-start-1 h-10 min-w-0 rounded-xl border border-hairline-strong bg-black/35 px-3 text-sm text-white outline-none transition placeholder:text-body-muted focus:border-karaoke-cyan/70 sm:col-start-auto sm:row-start-auto"
               />
               <button
                 type="button"
                 onClick={handleQuickAdd}
                 disabled={!quickAddTitle.trim() || !quickAddArtist.trim()}
-                className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-karaoke-cyan text-sm font-black text-canvas transition hover:scale-105 disabled:opacity-40"
+                className="row-span-2 grid h-full min-h-10 w-10 place-items-center self-stretch rounded-xl bg-karaoke-cyan text-sm font-black text-canvas transition hover:scale-105 disabled:opacity-40 sm:row-span-1"
               >
                 +
               </button>

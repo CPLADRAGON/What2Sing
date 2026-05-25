@@ -325,7 +325,7 @@ export function PickerExperience() {
   }
 
   return (
-    <main className="relative min-h-screen overflow-hidden bg-canvas px-5 py-5 text-white">
+    <main className="relative h-[100dvh] overflow-hidden bg-canvas px-5 py-5 text-white">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(255,61,139,0.22),transparent_34rem),radial-gradient(circle_at_92%_28%,rgba(85,230,255,0.14),transparent_24rem)]" />
       <motion.div
         aria-hidden="true"
@@ -463,7 +463,7 @@ export function PickerExperience() {
                 animate={{opacity: 1, y: 0, rotate: isShufflingDeck ? [0, -3, 3, 0] : [0, 1.5, -1, 0.5, 0], scale: isShufflingDeck ? [1, 0.98, 1.02, 1] : 1}}
                 exit={{opacity: 0, x: swipeDirection * 620, y: -48, rotate: swipeDirection * 26, scale: 0.86, transition: {duration: 0.24, ease: [0.22, 1, 0.36, 1]}}}
                 transition={{type: 'spring', stiffness: 340, damping: 22, mass: 0.8}}
-                className="absolute inset-0 flex touch-pan-y cursor-grab flex-col justify-between rounded-[2.25rem] border border-hairline-strong bg-[linear-gradient(145deg,rgba(255,255,255,0.13),rgba(255,255,255,0.035))] p-7 shadow-glow backdrop-blur-xl active:cursor-grabbing"
+                className="absolute inset-0 flex touch-none cursor-grab flex-col justify-between rounded-[2.25rem] border border-hairline-strong bg-[linear-gradient(145deg,rgba(255,255,255,0.13),rgba(255,255,255,0.035))] p-7 shadow-glow backdrop-blur-xl active:cursor-grabbing"
               >
                 <motion.div style={{opacity: skipOpacity, scale: skipScale}} className="pointer-events-none absolute left-6 top-20 rotate-[-10deg] rounded-2xl border-2 border-karaoke bg-karaoke/10 px-4 py-2 text-lg font-black uppercase tracking-[0.18em] text-karaoke shadow-[0_0_30px_rgba(255,61,139,0.28)]">
                   {t('skipBadge')}
