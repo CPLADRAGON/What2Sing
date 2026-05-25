@@ -91,6 +91,27 @@ export function syncPickedSongsToLibrary(library: SongLibrary, sessionPicks: Imp
   };
 }
 
+export function quickAddPickedSong(library: SongLibrary, song: ImportedSong): {library: SongLibrary; added: boolean} {
+  const key = getSongKey(song);
+  const alreadyPicked = library.pickedSongs.some((s) => getSongKey(s) === key);
+
+  if (alreadyPicked) {
+    return {library, added: false};
+  }
+
+  const alreadyInSongs = library.songs.some((s) => getSongKey(s) === key);
+
+  return {
+    library: {
+      ...library,
+      songs: alreadyInSongs ? library.songs : [...library.songs, song],
+      pickedSongs: [...library.pickedSongs, song],
+      updatedAt: new Date().toISOString()
+    },
+    added: true
+  };
+}
+
 export function removePickedSongFromLibrary(library: SongLibrary, indexToRemove: number): SongLibrary {
   return {
     ...library,

@@ -10,7 +10,7 @@ import {normalizeSongs} from '@/lib/importers/manual';
 import type {ImportedSong} from '@/lib/importers/qq';
 import {loadLatestPickerStateForCurrentUser, saveImportedDeckForCurrentUser, savePickerStateForCurrentUser} from '@/lib/picker/persistence';
 import {generateSingingOrder, pickRandomSong} from '@/lib/picker/queue';
-import {addSongsToLibrary, createLibrary, deserializeLibrary, getSongsForBatch, LIBRARY_STORAGE_KEY, migrateFromLegacyPickerState, serializeLibrary, type ImportBatch, type SongLibrary} from '@/lib/picker/library';
+import {addSongsToLibrary, createLibrary, deserializeLibrary, getSongsForBatch, LIBRARY_STORAGE_KEY, migrateFromLegacyPickerState, quickAddPickedSong, serializeLibrary, type ImportBatch, type SongLibrary} from '@/lib/picker/library';
 import {appendSongsToSession, chooseSyncedPickerState, createPickerState, deserializePickerState, PICKER_STORAGE_KEY, serializePickerState} from '@/lib/picker/session';
 import {supabase} from '@/lib/supabase';
 
@@ -39,6 +39,9 @@ export function LandingExperience() {
   const [generatedQueue, setGeneratedQueue] = useState<ImportedSong[]>([]);
   const [randomSong, setRandomSong] = useState<ImportedSong | null>(null);
   const [showImportHistory, setShowImportHistory] = useState(false);
+  const [quickAddTitle, setQuickAddTitle] = useState('');
+  const [quickAddArtist, setQuickAddArtist] = useState('');
+  const [quickAddMessage, setQuickAddMessage] = useState('');
   const steps = t.raw('steps') as string[];
   const loadingSteps = t.raw('loadingSteps') as string[];
 
@@ -106,6 +109,30 @@ export function LandingExperience() {
 
   function pickLandingRandomSong() {
     setRandomSong(pickRandomSong(savedLikedSongs, `${Date.now()}-${savedLikedSongs.length}`));
+  }
+
+  function handleQuickAdd() {
+    const title = quickAddTitle.trim();
+    const artist = quickAddArtist.trim();
+
+    if (!title || !artist) {
+      return;
+    }
+
+    const song: ImportedSong = {title, artist, platform: 'manual', tags: []};
+    const currentLib = library ?? createLibrary();
+    const result = quickAddPickedSong(currentLib, song);
+
+    if (!result.added) {
+      setQuickAddMessage(t('quickAddDuplicate'));
+      return;
+    }
+
+    window.localStorage.setItem(LIBRARY_STORAGE_KEY, serializeLibrary(result.library));
+    setLibrary(result.library);
+    setQuickAddTitle('');
+    setQuickAddArtist('');
+    setQuickAddMessage(t('quickAddSuccess', {title}));
   }
 
   function handleStartFresh() {
@@ -416,6 +443,35 @@ export function LandingExperience() {
               </div>
             ) : null}
             {status === 'loading' ? <ImportLoadingPanel loadingSteps={loadingSteps} title={t('loadingTitle')} body={t('loadingBody')} /> : null}
+          </div>
+
+          <div className="mt-4 rounded-[1.5rem] border border-white/10 bg-surface-elevated p-4 sm:p-5">
+            <p className="text-sm font-semibold text-ink-soft">{t('quickAddTitle')}</p>
+            <div className="mt-2 flex gap-2">
+              <input
+                value={quickAddTitle}
+                onChange={(event) => setQuickAddTitle(event.target.value)}
+                placeholder={t('quickAddTitlePlaceholder')}
+                className="h-10 min-w-0 flex-1 rounded-xl border border-hairline-strong bg-black/35 px-3 text-sm text-white outline-none transition placeholder:text-body-muted focus:border-karaoke-cyan/70"
+              />
+              <input
+                value={quickAddArtist}
+                onChange={(event) => setQuickAddArtist(event.target.value)}
+                placeholder={t('quickAddArtistPlaceholder')}
+                className="h-10 min-w-0 flex-1 rounded-xl border border-hairline-strong bg-black/35 px-3 text-sm text-white outline-none transition placeholder:text-body-muted focus:border-karaoke-cyan/70"
+              />
+              <button
+                type="button"
+                onClick={handleQuickAdd}
+                disabled={!quickAddTitle.trim() || !quickAddArtist.trim()}
+                className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-karaoke-cyan text-sm font-black text-canvas transition hover:scale-105 disabled:opacity-40"
+              >
+                +
+              </button>
+            </div>
+            {quickAddMessage ? (
+              <p className={`mt-2 text-xs ${quickAddMessage.includes('!') ? 'text-karaoke-cyan' : 'text-body-muted'}`}>{quickAddMessage}</p>
+            ) : null}
           </div>
 
           <div className="mt-4 rounded-[1.5rem] border border-hairline-strong bg-black/30 p-4">

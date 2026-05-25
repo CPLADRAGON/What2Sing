@@ -5,6 +5,7 @@ import {
   deserializeLibrary,
   getSongsForBatch,
   migrateFromLegacyPickerState,
+  quickAddPickedSong,
   removePickedSongFromLibrary,
   serializeLibrary,
   syncPickedSongsToLibrary
@@ -119,5 +120,33 @@ describe('song library', () => {
     expect(lib.songs).toEqual(songs);
     expect(lib.batches).toEqual(legacyBatches);
     expect(lib.pickedSongs).toEqual([songs[0]]);
+  });
+
+  it('quick-adds a new song directly to the picked list', () => {
+    const lib = createLibrary();
+    const newSong: ImportedSong = {title: '晴天', artist: '周杰伦', platform: 'manual', tags: []};
+    const result = quickAddPickedSong(lib, newSong);
+
+    expect(result.added).toBe(true);
+    expect(result.library.pickedSongs).toEqual([newSong]);
+    expect(result.library.songs).toEqual([newSong]);
+  });
+
+  it('quick-adds a song already in the library without duplicating it in songs', () => {
+    const lib = addSongsToLibrary(createLibrary(), songs, 'QQ Music').library;
+    const result = quickAddPickedSong(lib, songs[1]);
+
+    expect(result.added).toBe(true);
+    expect(result.library.pickedSongs).toEqual([songs[1]]);
+    expect(result.library.songs).toEqual(songs);
+  });
+
+  it('rejects quick-adding a song that is already picked', () => {
+    const lib = createLibrary();
+    const first = quickAddPickedSong(lib, songs[0]);
+    const second = quickAddPickedSong(first.library, songs[0]);
+
+    expect(second.added).toBe(false);
+    expect(second.library.pickedSongs).toEqual([songs[0]]);
   });
 });
