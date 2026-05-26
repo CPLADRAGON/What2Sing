@@ -23,7 +23,10 @@ export type PickerState = {
   updatedAt: string;
 };
 
+export type BatchSessionMap = Record<string, PickerState>;
+
 export const PICKER_STORAGE_KEY = 'ktv-picker:songs';
+export const BATCH_SESSIONS_KEY = 'ktv-picker:batch-sessions';
 
 export function createPickerState(songs: ImportedSong[], options: CreatePickerStateOptions = {}): PickerState {
   const orderMode = options.orderMode ?? 'ordered';
@@ -214,6 +217,53 @@ export function deserializeImportedSongs(value: string | null): ImportedSong[] {
   } catch {
     return [];
   }
+}
+
+export function loadBatchSessions(): BatchSessionMap {
+  try {
+    const raw = window.localStorage.getItem(BATCH_SESSIONS_KEY);
+
+    if (!raw) {
+      return {};
+    }
+
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const result: BatchSessionMap = {};
+
+    for (const [batchId, value] of Object.entries(parsed)) {
+      const state = deserializePickerState(JSON.stringify(value));
+
+      if (state) {
+        result[batchId] = state;
+      }
+    }
+
+    return result;
+  } catch {
+    return {};
+  }
+}
+
+export function saveBatchSession(batchId: string, state: PickerState): void {
+  const map = loadBatchSessions();
+  map[batchId] = state;
+  window.localStorage.setItem(BATCH_SESSIONS_KEY, JSON.stringify(map));
+}
+
+export function removeBatchSession(batchId: string): void {
+  const map = loadBatchSessions();
+  delete map[batchId];
+  window.localStorage.setItem(BATCH_SESSIONS_KEY, JSON.stringify(map));
+}
+
+export function getBatchProgress(state: PickerState): {total: number; swiped: number; liked: number; skipped: number; complete: boolean} {
+  return {
+    total: state.deck.length,
+    swiped: state.currentIndex,
+    liked: state.liked.length,
+    skipped: state.skipped.length,
+    complete: state.currentIndex >= state.deck.length
+  };
 }
 
 function isImportedSong(value: unknown): value is ImportedSong {

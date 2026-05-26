@@ -10,8 +10,8 @@ import {normalizeSongs} from '@/lib/importers/manual';
 import type {ImportedSong} from '@/lib/importers/qq';
 import {loadLatestPickerStateForCurrentUser, saveImportedDeckForCurrentUser, saveLibraryForCurrentUser, savePickerStateForCurrentUser, chooseSyncedLibrary, loadLibraryForCurrentUser} from '@/lib/picker/persistence';
 import {generateSingingOrder, pickRandomSong} from '@/lib/picker/queue';
-import {addSongsToLibrary, createLibrary, deserializeLibrary, getSongsForBatch, LIBRARY_STORAGE_KEY, migrateFromLegacyPickerState, quickAddPickedSong, removePickedSongFromLibrary, removeSongFromLibrary, removeBatchFromLibrary, serializeLibrary, type ImportBatch, type SongLibrary} from '@/lib/picker/library';
-import {appendSongsToSession, chooseSyncedPickerState, createPickerState, deserializePickerState, PICKER_STORAGE_KEY, serializePickerState} from '@/lib/picker/session';
+import {addSongsToLibrary, createLibrary, deserializeLibrary, getSongsForBatch, LIBRARY_STORAGE_KEY, migrateFromLegacyPickerState, quickAddPickedSong, removePickedSongFromLibrary, removeBatchFromLibrary, serializeLibrary, type ImportBatch, type SongLibrary} from '@/lib/picker/library';
+import {chooseSyncedPickerState, createPickerState, deserializePickerState, getBatchProgress, loadBatchSessions, PICKER_STORAGE_KEY, removeBatchSession, saveBatchSession, serializePickerState, type BatchSessionMap} from '@/lib/picker/session';
 import {supabase} from '@/lib/supabase';
 
 const sampleSongs = '青花瓷 - 周杰伦\n后来 - 刘若英\n修炼爱情 - 林俊杰\n倔强 - 五月天';
@@ -39,25 +39,13 @@ export function LandingExperience() {
   const [quickAddTitle, setQuickAddTitle] = useState('');
   const [quickAddArtist, setQuickAddArtist] = useState('');
   const [quickAddMessage, setQuickAddMessage] = useState('');
-  const [libraryFilter, setLibraryFilter] = useState<'all' | string>('all');
   const [libraryExpanded, setLibraryExpanded] = useState(true);
   const [activeTab, setActiveTab] = useState<'selected' | 'imported'>('selected');
   const [exportMessage, setExportMessage] = useState('');
+  const [batchSessions, setBatchSessions] = useState<BatchSessionMap>({});
   const queueCardRef = useRef<HTMLDivElement>(null);
   const steps = t.raw('steps') as string[];
   const loadingSteps = t.raw('loadingSteps') as string[];
-
-  const filteredLibrarySongs = useMemo(() => {
-    if (!library) {
-      return [];
-    }
-
-    if (libraryFilter !== 'all') {
-      return getSongsForBatch(library, libraryFilter);
-    }
-
-    return library.songs;
-  }, [library, libraryFilter]);
 
   useEffect(() => {
     let isMounted = true;
@@ -89,6 +77,8 @@ export function LandingExperience() {
         window.localStorage.setItem(LIBRARY_STORAGE_KEY, serializeLibrary(lib));
         setLibrary(lib);
       }
+
+      setBatchSessions(loadBatchSessions());
     }
 
     void loadSavedProgress();
@@ -147,14 +137,6 @@ export function LandingExperience() {
     setQuickAddMessage(t('quickAddSuccess', {title}));
   }
 
-  function handleDeleteSong(song: ImportedSong) {
-    const currentLib = library ?? createLibrary();
-    const updated = removeSongFromLibrary(currentLib, song);
-    window.localStorage.setItem(LIBRARY_STORAGE_KEY, serializeLibrary(updated));
-    setLibrary(updated);
-    void saveLibraryForCurrentUser(updated);
-  }
-
   function handleDeleteBatch(batchId: string) {
     const currentLib = library ?? createLibrary();
     const updated = removeBatchFromLibrary(currentLib, batchId);
@@ -162,9 +144,8 @@ export function LandingExperience() {
     setLibrary(updated);
     void saveLibraryForCurrentUser(updated);
 
-    if (libraryFilter === batchId) {
-      setLibraryFilter('all');
-    }
+    removeBatchSession(batchId);
+    setBatchSessions(loadBatchSessions());
   }
 
   function handleRemovePickedSong(index: number) {
@@ -238,9 +219,11 @@ export function LandingExperience() {
   function handleClearLibrary() {
     window.localStorage.removeItem(PICKER_STORAGE_KEY);
     window.localStorage.removeItem(LIBRARY_STORAGE_KEY);
+    window.localStorage.removeItem('ktv-picker:batch-sessions');
     const emptyLib = {songs: [], batches: [], pickedSongs: [], updatedAt: new Date().toISOString()};
     void saveLibraryForCurrentUser(emptyLib);
     setLibrary(null);
+    setBatchSessions({});
     setSongs([]);
     setHasSavedProgress(false);
     setGeneratedQueue([]);
@@ -254,16 +237,35 @@ export function LandingExperience() {
       return;
     }
 
-    const batchSongs = batchId === '__all__' ? library.songs : getSongsForBatch(library, batchId);
+    const batchSongs = getSongsForBatch(library, batchId);
 
     if (batchSongs.length === 0) {
       return;
     }
 
+    // Resume existing session or create fresh
+    const existingSession = batchSessions[batchId];
+    const session = existingSession ?? createPickerState(batchSongs);
+    window.localStorage.setItem(PICKER_STORAGE_KEY, serializePickerState(session));
+    saveBatchSession(batchId, session);
+    setBatchSessions(loadBatchSessions());
+    await savePickerStateForCurrentUser(session);
+    router.push(`/${locale}/pick?batch=${encodeURIComponent(batchId)}`);
+  }
+
+  function handleResetBatch(batchId: string) {
+    if (!library) {
+      return;
+    }
+
+    if (!window.confirm(t('batchConfirmReset'))) {
+      return;
+    }
+
+    const batchSongs = getSongsForBatch(library, batchId);
     const freshSession = createPickerState(batchSongs);
-    window.localStorage.setItem(PICKER_STORAGE_KEY, serializePickerState(freshSession));
-    await savePickerStateForCurrentUser(freshSession);
-    router.push(`/${locale}/pick`);
+    saveBatchSession(batchId, freshSession);
+    setBatchSessions(loadBatchSessions());
   }
 
   async function signOut() {
@@ -322,31 +324,26 @@ export function LandingExperience() {
       setLibrary(libResult.library);
       void saveLibraryForCurrentUser(libResult.library);
 
-      const localState = deserializePickerState(window.localStorage.getItem(PICKER_STORAGE_KEY));
-      const remoteSession = await loadLatestPickerStateForCurrentUser();
-      const savedState = chooseSyncedPickerState(localState, remoteSession?.state ?? null);
-      const savedStateHasProgress = savedState ? savedState.currentIndex > 0 || savedState.liked.length > 0 || savedState.skipped.length > 0 : false;
+      // Create a fresh batch session for the newly imported batch
+      const newBatch = libResult.library.batches[libResult.library.batches.length - 1];
 
-      if (savedState?.deck.length && savedStateHasProgress) {
-        const updatedSession = appendSongsToSession(savedState, nextSongs);
-        window.localStorage.setItem(PICKER_STORAGE_KEY, serializePickerState(updatedSession));
-        await savePickerStateForCurrentUser(updatedSession);
-        setSongs(updatedSession.deck);
-        setHasSavedProgress(true);
-      } else {
-        const freshState = createPickerState(libResult.library.songs);
-        window.localStorage.setItem(PICKER_STORAGE_KEY, serializePickerState(freshState));
-        await saveImportedDeckForCurrentUser(libResult.library.songs);
-        setSongs(libResult.library.songs);
-        setHasSavedProgress(false);
+      if (newBatch && libResult.added > 0) {
+        const batchSongs = getSongsForBatch(libResult.library, newBatch.id);
+        const freshBatchState = createPickerState(batchSongs);
+        saveBatchSession(newBatch.id, freshBatchState);
+        setBatchSessions(loadBatchSessions());
+
+        // Also set as active picker state
+        window.localStorage.setItem(PICKER_STORAGE_KEY, serializePickerState(freshBatchState));
+        await saveImportedDeckForCurrentUser(batchSongs);
+        setSongs(batchSongs);
       }
+      setHasSavedProgress(false);
 
       setStatus('done');
       setMessage(libResult.duplicatesSkipped > 0
         ? t('importedWithDuplicates', {added: libResult.added, skipped: libResult.duplicatesSkipped, total: libResult.library.songs.length})
-        : libResult.added < nextSongs.length || savedState?.deck.length
-          ? t('importedMerged', {added: libResult.added, total: libResult.library.songs.length})
-          : t('imported', {count: nextSongs.length}));
+        : t('imported', {count: libResult.added}));
     } catch (error) {
       setStatus('error');
       setMessage(error instanceof DOMException && error.name === 'AbortError' ? t('timeoutError') : error instanceof Error ? error.message : 'Import failed');
@@ -513,7 +510,11 @@ export function LandingExperience() {
                 <p className="text-xs leading-5 text-ink-soft">{t('nextAfterImport')}</p>
                 <button
                   type="button"
-                  onClick={() => router.push(`/${locale}/pick`)}
+                  onClick={() => {
+                    const lastBatch = library?.batches[library.batches.length - 1];
+                    const batchParam = lastBatch ? `?batch=${encodeURIComponent(lastBatch.id)}` : '';
+                    router.push(`/${locale}/pick${batchParam}`);
+                  }}
                   className="mt-3 h-11 w-full rounded-xl bg-karaoke-cyan text-sm font-black text-canvas transition hover:scale-[1.01]"
                 >
                   {t('startPicking')}
@@ -659,39 +660,61 @@ export function LandingExperience() {
                     {/* ── Imported tab ── */}
                     {activeTab === 'imported' ? (
                       <div>
-                        {library && library.songs.length > 0 ? (
-                          <>
-                            <div className="mb-2.5 flex flex-wrap gap-1.5">
-                              <button type="button" onClick={() => setLibraryFilter('all')} className={`rounded-full px-3 py-1.5 text-[10px] font-black transition ${libraryFilter === 'all' ? 'bg-white text-canvas' : 'border border-white/10 bg-white/[0.04] text-ink-soft'}`}>
-                                {t('libraryFilterAll')} ({library.songs.length})
-                              </button>
-                              {importBatches.map((batch) => (
-                                <button key={batch.id} type="button" onClick={() => setLibraryFilter(batch.id)} className={`group flex items-center gap-1 rounded-full px-3 py-1.5 text-[10px] font-black transition ${libraryFilter === batch.id ? 'bg-karaoke-cyan text-canvas' : 'border border-white/10 bg-white/[0.04] text-ink-soft'}`}>
-                                  <span>{batch.label} · {batch.songCount}</span>
-                                  <span role="button" tabIndex={0} onClick={(e) => { e.stopPropagation(); handleDeleteBatch(batch.id); }} onKeyDown={(e) => { if (e.key === 'Enter') { e.stopPropagation(); handleDeleteBatch(batch.id); } }} className="ml-0.5 hidden rounded-full hover:bg-white/20 group-hover:inline-block">✕</span>
-                                </button>
-                              ))}
-                            </div>
-                            <div className="max-h-[400px] space-y-1.5 overflow-y-auto">
-                              {filteredLibrarySongs.map((song, index) => (
-                                <div key={`${song.title}-${song.artist}-${index}`} className="group flex items-center justify-between rounded-xl border border-white/6 bg-white/[0.03] px-3 py-2.5">
-                                  <div className="min-w-0 flex-1">
-                                    <p className="text-sm font-bold text-white">{song.title}</p>
-                                    <p className="text-xs text-body-muted">{song.artist}</p>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <span className="shrink-0 rounded-full bg-white/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] text-ink-soft">{song.platform}</span>
-                                    <button type="button" onClick={() => handleDeleteSong(song)} className="hidden shrink-0 rounded-full border border-karaoke/20 bg-karaoke/10 px-2 py-1 text-[10px] font-black text-karaoke transition hover:bg-karaoke/20 group-hover:block">
-                                      {t('libraryDeleteSong')}
-                                    </button>
+                        {library && library.songs.length > 0 && importBatches.length > 0 ? (
+                          <div className="space-y-2.5">
+                            {importBatches.map((batch) => {
+                              const session = batchSessions[batch.id];
+                              const progress = session ? getBatchProgress(session) : null;
+                              const hasProgress = progress && progress.swiped > 0;
+                              const isComplete = progress?.complete ?? false;
+                              const pct = progress ? Math.round((progress.swiped / progress.total) * 100) : 0;
+
+                              return (
+                                <div key={batch.id} className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03]">
+                                  <div className="p-3.5">
+                                    <div className="flex items-start justify-between gap-2">
+                                      <div className="min-w-0 flex-1">
+                                        <p className="text-sm font-black text-white">{batch.label}</p>
+                                        <p className="mt-0.5 text-[10px] text-body-muted">{batch.songCount} songs</p>
+                                      </div>
+                                      <div className="flex shrink-0 items-center gap-1.5">
+                                        {isComplete ? (
+                                          <span className="rounded-full bg-karaoke-cyan/15 px-2.5 py-1 text-[10px] font-black text-karaoke-cyan">{t('batchComplete')}</span>
+                                        ) : null}
+                                        <button type="button" onClick={() => handleDeleteBatch(batch.id)} className="rounded-full p-1 text-body-muted transition hover:bg-white/10 hover:text-white">
+                                          <span className="text-xs">✕</span>
+                                        </button>
+                                      </div>
+                                    </div>
+
+                                    {hasProgress ? (
+                                      <div className="mt-2.5">
+                                        <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+                                          <div className={`h-full rounded-full transition-all ${isComplete ? 'bg-karaoke-cyan' : 'bg-gradient-to-r from-karaoke to-karaoke-cyan'}`} style={{width: `${pct}%`}} />
+                                        </div>
+                                        <div className="mt-1.5 flex gap-3 text-[10px] text-body-muted">
+                                          <span>{t('batchProgress', {swiped: progress.swiped, total: progress.total})}</span>
+                                          <span className="text-karaoke-cyan">{t('batchLiked', {count: progress.liked})}</span>
+                                          <span>{t('batchSkipped', {count: progress.skipped})}</span>
+                                        </div>
+                                      </div>
+                                    ) : null}
+
+                                    <div className={`${hasProgress ? 'mt-2.5' : 'mt-3'} flex gap-2`}>
+                                      <button type="button" onClick={() => void handlePickBatch(batch.id)} className={`h-9 flex-1 rounded-xl text-xs font-black transition hover:scale-[1.01] ${isComplete ? 'border border-karaoke-cyan/25 bg-karaoke-cyan/10 text-karaoke-cyan' : 'bg-karaoke-cyan text-canvas'}`}>
+                                        {hasProgress ? t('batchResumePicking') : t('batchStartPicking')}
+                                      </button>
+                                      {hasProgress ? (
+                                        <button type="button" onClick={() => handleResetBatch(batch.id)} className="h-9 rounded-xl border border-white/10 bg-white/[0.04] px-3 text-xs font-black text-ink-soft transition hover:bg-white/10">
+                                          {t('batchResetProgress')}
+                                        </button>
+                                      ) : null}
+                                    </div>
                                   </div>
                                 </div>
-                              ))}
-                            </div>
-                            <button type="button" onClick={() => void handlePickBatch(libraryFilter === 'all' ? '__all__' : libraryFilter)} className="mt-2.5 h-10 w-full rounded-xl bg-karaoke-cyan text-xs font-black text-canvas transition hover:scale-[1.01]">
-                              {libraryFilter === 'all' ? t('libraryPickAll') : t('pickThisList')} ({filteredLibrarySongs.length})
-                            </button>
-                          </>
+                              );
+                            })}
+                          </div>
                         ) : (
                           <p className="py-8 text-center text-xs leading-5 text-body-muted">{t('libraryEmpty')}</p>
                         )}

@@ -23,7 +23,7 @@ describe('landing mobile navigation', () => {
 
     expect(source).toContain('generateSingingOrder');
     expect(source).toContain('pickRandomSong');
-    expect(source).toContain('handleDeleteSong');
+    expect(source).toContain('handleDeleteBatch');
   });
 
   it('shows logout instead of login for signed-in users', () => {
@@ -42,12 +42,13 @@ describe('landing mobile navigation', () => {
     expect(source).toContain("activeSource === 'manual'");
   });
 
-  it('merges newly keyed songs with existing swipe progress instead of overwriting it', () => {
+  it('saves per-batch picker sessions and syncs to library', () => {
     const source = readFileSync('src/components/landing/landing-experience.tsx', 'utf8');
 
-    expect(source).toContain('appendSongsToSession');
+    expect(source).toContain('saveBatchSession');
     expect(source).toContain('addSongsToLibrary');
     expect(source).toContain('savePickerStateForCurrentUser');
+    expect(source).toContain('getBatchProgress');
   });
 
   it('uses immediate card transitions instead of waiting for exit animations', () => {

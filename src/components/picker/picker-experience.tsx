@@ -22,6 +22,7 @@ import {
   PICKER_STORAGE_KEY,
   reorderRemainingSongs,
   restartWithUnselectedSongs,
+  saveBatchSession,
   serializePickerState,
   type PickerDecision,
   type PickerOrderMode,
@@ -58,6 +59,7 @@ export function PickerExperience() {
   const [feedbackMessage, setFeedbackMessage] = useState<{label: string; tone: 'like' | 'skip'; id: number} | null>(null);
   const flingRef = useRef<ReturnType<typeof animate> | null>(null);
   const lastHapticThreshold = useRef(0);
+  const activeBatchId = useRef<string | null>(null);
   const [library, setLibrary] = useState<SongLibrary | null>(null);
   const loaded = state !== null;
   const safeState = state ?? createPickerState([]);
@@ -68,9 +70,15 @@ export function PickerExperience() {
 
   useEffect(() => {
     let isMounted = true;
-    const queueViewTimer = new URLSearchParams(window.location.search).get('view') === 'queue'
+    const params = new URLSearchParams(window.location.search);
+    const queueViewTimer = params.get('view') === 'queue'
       ? window.setTimeout(() => setViewMode('selection'), 0)
       : null;
+    const batchParam = params.get('batch');
+
+    if (batchParam) {
+      activeBatchId.current = batchParam;
+    }
 
     async function loadSavedProgress() {
       const raw = window.localStorage.getItem(PICKER_STORAGE_KEY);
@@ -181,6 +189,10 @@ export function PickerExperience() {
 
     window.localStorage.setItem(PICKER_STORAGE_KEY, serializePickerState(state));
     void savePickerStateForCurrentUser(state);
+
+    if (activeBatchId.current) {
+      saveBatchSession(activeBatchId.current, state);
+    }
 
     if (state.liked.length > 0) {
       const rawLib = window.localStorage.getItem(LIBRARY_STORAGE_KEY);
