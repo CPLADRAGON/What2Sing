@@ -15,7 +15,7 @@ import {appendSongsToSession, chooseSyncedPickerState, createPickerState, deseri
 import {supabase} from '@/lib/supabase';
 
 const sampleSongs = '青花瓷 - 周杰伦\n后来 - 刘若英\n修炼爱情 - 林俊杰\n倔强 - 五月天';
-type ImportSource = 'qq' | 'spotify' | 'manual';
+type ImportSource = 'qq' | 'spotify' | 'netease' | 'manual';
 
 export function LandingExperience() {
   const t = useTranslations('landing');
@@ -315,7 +315,7 @@ export function LandingExperience() {
       }
 
       const nextSongs = [...importedSongs, ...manualSongs];
-      const batchLabel = activeSource === 'manual' ? t('manualBatchLabel') : activeSource === 'spotify' ? 'Spotify' : 'QQ Music';
+      const batchLabel = activeSource === 'manual' ? t('manualBatchLabel') : activeSource === 'spotify' ? 'Spotify' : activeSource === 'netease' ? 'NetEase' : 'QQ Music';
 
       const currentLib = library ?? createLibrary();
       const libResult = addSongsToLibrary(currentLib, nextSongs, batchLabel);
@@ -448,7 +448,7 @@ export function LandingExperience() {
           <div className="rounded-[1.5rem] border border-white/10 bg-surface-elevated p-4 sm:p-5">
             <div className="flex items-center justify-between gap-3">
               <label className="text-sm font-semibold text-ink-soft" htmlFor="qq-url">
-                {activeSource === 'manual' ? t('manualSourceTitle') : activeSource === 'spotify' ? t('spotifyUrlLabel') : activeSource === 'qq' ? t('urlLabel') : t('urlLabel')}
+                {activeSource === 'manual' ? t('manualSourceTitle') : activeSource === 'spotify' ? t('spotifyUrlLabel') : activeSource === 'netease' ? t('neteaseUrlLabel') : t('urlLabel')}
               </label>
               <button type="button" onClick={() => setShowSourcePicker(true)} className="rounded-full border border-karaoke-cyan/25 bg-karaoke-cyan/10 px-3 py-1.5 text-xs font-black text-karaoke-cyan">
                 {t('chooseSource')}
@@ -460,7 +460,7 @@ export function LandingExperience() {
                 value={url}
                 onChange={(event) => setUrl(event.target.value)}
                 disabled={status === 'loading'}
-                placeholder={activeSource === 'spotify' ? t('spotifyUrlPlaceholder') : t('urlPlaceholder')}
+                placeholder={activeSource === 'spotify' ? t('spotifyUrlPlaceholder') : activeSource === 'netease' ? t('neteaseUrlPlaceholder') : t('urlPlaceholder')}
                 className="mt-2 h-12 w-full rounded-2xl border border-hairline-strong bg-black/35 px-4 text-sm text-white outline-none transition placeholder:text-body-muted focus:border-karaoke/70 focus:shadow-[0_0_0_4px_rgba(255,61,139,0.12)]"
               />
             ) : null}
@@ -711,7 +711,7 @@ export function LandingExperience() {
               </button>
             </div>
             <div className="mt-4 grid gap-3">
-              {(['qq', 'spotify', 'manual'] as const).map((source) => (
+              {(['qq', 'spotify', 'netease', 'manual'] as const).map((source) => (
                 <button
                   key={source}
                   type="button"

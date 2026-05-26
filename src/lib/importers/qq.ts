@@ -4,7 +4,7 @@ export {normalizeSongs} from './manual';
 export type ImportedSong = {
   title: string;
   artist: string;
-  platform: 'qq' | 'spotify' | 'manual';
+  platform: 'qq' | 'spotify' | 'netease' | 'manual';
   tags: string[];
 };
 

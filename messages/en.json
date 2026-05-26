@@ -12,6 +12,8 @@
     "spotifyUrlLabel": "Spotify playlist URL",
     "spotifyUrlPlaceholder": "https://open.spotify.com/playlist/...",
     "spotifyExperimental": "Spotify public-page import is experimental. If it cannot read tracks, paste the playlist text below.",
+    "neteaseUrlLabel": "NetEase Cloud Music playlist URL",
+    "neteaseUrlPlaceholder": "https://music.163.com/playlist?id=...",
     "manualSourceTitle": "Manual song paste",
     "chooseSource": "Source",
     "sourcePickerTitle": "Choose import source",
@@ -90,6 +92,10 @@
       "spotify": {
         "title": "Spotify experimental",
         "body": "Try public playlist-page parsing, with manual paste fallback."
+      },
+      "netease": {
+        "title": "NetEase Cloud Music",
+        "body": "Import from NetEase Cloud Music (网易云音乐) playlist links."
       },
       "manual": {
         "title": "Manual paste",
