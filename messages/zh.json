@@ -144,7 +144,7 @@
   },
   "auth": {
     "loginTitle": "登录后保存你的 KTV 记录",
-    "loginBody": "使用邮箱魔法链接登录，不需要密码。Supabase 配置完成后，你的导入歌单和筛歌进度会保存到账号下。",
+    "loginBody": "使用邮箱魔法链接登录，不需要密码。你的歌曲库和筛歌进度会跨设备同步。",
     "emailLabel": "邮箱",
     "emailPlaceholder": "you@example.com",
     "sendLink": "发送魔法链接",
@@ -157,7 +157,7 @@
     "retryIn": "{seconds} 秒后再试",
     "sent": "登录邮件已发送。Safari 可点链接，主屏幕 App 请复制验证码。",
     "verified": "已登录，可以返回继续筛歌。",
-    "unavailable": "Supabase 还没有配置。游客模式仍然可用。",
+    "unavailable": "登录暂时不可用。无需账号仍可正常使用。",
     "signOut": "退出登录",
     "signedInAs": "当前登录：{email}",
     "backHome": "返回首页"

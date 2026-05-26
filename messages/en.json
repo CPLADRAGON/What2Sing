@@ -144,7 +144,7 @@
   },
   "auth": {
     "loginTitle": "Log in to save your KTV history",
-    "loginBody": "Use a magic link. No password needed. Your imported decks and picks can be saved to your account once Supabase is configured.",
+    "loginBody": "Use a magic link. No password needed. Your song library and picks sync across devices.",
     "emailLabel": "Email",
     "emailPlaceholder": "you@example.com",
     "sendLink": "Send magic link",
@@ -157,7 +157,7 @@
     "retryIn": "Try again in {seconds}s",
     "sent": "Login email sent. Use the link in Safari, or copy the code for the Home Screen app.",
     "verified": "Signed in. You can return to picking songs.",
-    "unavailable": "Supabase is not configured yet. Guest mode still works.",
+    "unavailable": "Login is temporarily unavailable. You can still use the app without an account.",
     "signOut": "Sign out",
     "signedInAs": "Signed in as {email}",
     "backHome": "Back home"
