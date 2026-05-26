@@ -2,6 +2,7 @@
 
 import {motion} from 'framer-motion';
 import {useLocale, useTranslations} from 'next-intl';
+import Image from 'next/image';
 import Link from 'next/link';
 import {useRouter} from 'next/navigation';
 import {useEffect, useMemo, useRef, useState} from 'react';
@@ -370,9 +371,8 @@ export function LandingExperience() {
       <div className="pointer-events-none absolute -right-28 top-44 h-80 w-80 rounded-full bg-karaoke-cyan/10 blur-3xl" />
 
       <nav className="relative z-10 mx-auto flex max-w-6xl items-center justify-between gap-2 rounded-full border border-hairline-strong bg-white/[0.03] px-3 py-3 backdrop-blur-xl sm:px-4">
-        <Link href={`/${locale}`} className="flex min-w-0 items-center gap-2 font-display text-sm font-black tracking-tight">
-          <span className="grid h-8 w-8 place-items-center rounded-full bg-white text-canvas">唱</span>
-          <span className="hidden xs:inline sm:inline">KTV-Picker</span>
+        <Link href={`/${locale}`} className="flex min-w-0 items-center gap-2">
+          <Image src="/logo.png" alt="What2Sing" width={120} height={32} className="h-8 w-auto" priority />
         </Link>
         <div className="flex items-center gap-2">
         {displayName ? (
@@ -684,9 +684,24 @@ export function LandingExperience() {
                                 <div key={batch.id} className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03]">
                                   <div className="p-3.5">
                                     <div className="flex items-start justify-between gap-2">
-                                      <button type="button" onClick={() => setExpandedBatches((prev) => {const next = new Set(prev); if (next.has(batch.id)) next.delete(batch.id); else next.add(batch.id); return next;})} className="min-w-0 flex-1 text-left">
-                                        <p className="text-sm font-black text-white">{batch.label} <span className="text-body-muted">{isExpanded ? '▲' : '▼'}</span></p>
-                                        <p className="mt-0.5 text-[10px] text-body-muted">{batch.songCount} songs</p>
+                                      <button type="button" onClick={() => setExpandedBatches((prev) => {const next = new Set(prev); if (next.has(batch.id)) next.delete(batch.id); else next.add(batch.id); return next;})} className="flex min-w-0 flex-1 items-start gap-2 text-left">
+                                        <motion.svg
+                                          animate={{rotate: isExpanded ? 180 : 0}}
+                                          transition={{duration: 0.2}}
+                                          className="mt-0.5 h-4 w-4 shrink-0 text-body-muted"
+                                          viewBox="0 0 16 16"
+                                          fill="none"
+                                          stroke="currentColor"
+                                          strokeWidth="2"
+                                          strokeLinecap="round"
+                                          strokeLinejoin="round"
+                                        >
+                                          <path d="M4 6l4 4 4-4" />
+                                        </motion.svg>
+                                        <div className="min-w-0">
+                                          <p className="text-sm font-black text-white">{batch.label}</p>
+                                          <p className="mt-0.5 text-[10px] text-body-muted">{batch.songCount} songs</p>
+                                        </div>
                                       </button>
                                       <div className="flex shrink-0 items-center gap-1.5">
                                         {isComplete ? (
