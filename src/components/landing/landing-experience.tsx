@@ -604,16 +604,16 @@ export function LandingExperience() {
                                   <p className="mb-3 text-xs font-black text-karaoke-cyan">{t('exportQueueTitle')}</p>
                                   <div className="space-y-1.5">
                                     {generatedQueue.map((song, index) => (
-                                      <div key={`q-${song.title}-${song.artist}-${index}`} className="flex items-center gap-3 px-1 py-1">
-                                        <span className="w-5 shrink-0 text-right text-xs font-black text-karaoke-cyan">{index + 1}</span>
+                                      <div key={`q-${song.title}-${song.artist}-${index}`} className="flex items-center justify-between rounded-xl border border-karaoke-cyan/15 bg-white/[0.035] px-3 py-2.5">
                                         <div className="min-w-0 flex-1">
-                                          <p className="text-sm font-bold text-white">{song.title}</p>
+                                          <p className="text-sm font-bold text-white"><span className="mr-2 text-karaoke-cyan">#{index + 1}</span>{song.title}</p>
                                           <p className="text-xs text-body-muted">{song.artist}</p>
                                         </div>
+                                        <span className="shrink-0 rounded-full bg-white/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] text-ink-soft">{song.platform}</span>
                                       </div>
                                     ))}
                                   </div>
-                                  <p className="mt-3 text-right text-[10px] text-body-muted">-- {t('exportBranding')}</p>
+                                  <p className="mt-3 text-right text-[10px] text-body-muted">{t('exportBranding')}</p>
                                 </div>
                                 <div className="mt-2 grid grid-cols-2 gap-1.5">
                                   <button type="button" onClick={handleCopyQueueText} className="h-9 rounded-lg border border-white/10 bg-white/[0.04] text-[10px] font-black text-ink-soft transition hover:bg-white/10">
