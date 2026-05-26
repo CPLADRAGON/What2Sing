@@ -2,7 +2,6 @@
 
 import {motion} from 'framer-motion';
 import {useLocale, useTranslations} from 'next-intl';
-import Image from 'next/image';
 import Link from 'next/link';
 import {useRouter} from 'next/navigation';
 import {useEffect, useMemo, useRef, useState} from 'react';
@@ -371,8 +370,9 @@ export function LandingExperience() {
       <div className="pointer-events-none absolute -right-28 top-44 h-80 w-80 rounded-full bg-karaoke-cyan/10 blur-3xl" />
 
       <nav className="relative z-10 mx-auto flex max-w-6xl items-center justify-between gap-2 rounded-full border border-hairline-strong bg-white/[0.03] px-3 py-3 backdrop-blur-xl sm:px-4">
-        <Link href={`/${locale}`} className="flex min-w-0 items-center gap-2">
-          <Image src="/logo.png" alt="What2Sing" width={120} height={32} className="h-8 w-auto" priority />
+        <Link href={`/${locale}`} className="flex min-w-0 items-center gap-2 font-display text-sm font-black tracking-tight">
+          <span className="grid h-8 w-8 place-items-center rounded-full bg-white text-canvas">唱</span>
+          <span className="hidden xs:inline sm:inline">KTV-Picker</span>
         </Link>
         <div className="flex items-center gap-2">
         {displayName ? (

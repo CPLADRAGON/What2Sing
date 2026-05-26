@@ -6,9 +6,9 @@ const manrope = Manrope({subsets: ['latin'], variable: '--font-display'});
 const notoSansSc = Noto_Sans_SC({subsets: ['latin'], weight: ['400', '500', '700', '900'], variable: '--font-sans'});
 
 export const metadata: Metadata = {
-  title: 'What2Sing',
+  title: 'KTV-Picker',
   description: 'Mobile-first KTV song importing and picking.',
-  applicationName: 'What2Sing',
+  applicationName: 'KTV-Picker',
   manifest: '/manifest.webmanifest',
   appleWebApp: {
     capable: true,
