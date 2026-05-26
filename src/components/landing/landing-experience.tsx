@@ -25,7 +25,6 @@ export function LandingExperience() {
   const [url, setUrl] = useState('');
   const [text, setText] = useState('');
   const [activeSource, setActiveSource] = useState<ImportSource>('qq');
-  const [showSourcePicker, setShowSourcePicker] = useState(false);
   const [songs, setSongs] = useState<ImportedSong[]>([]);
   const [status, setStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
   const [message, setMessage] = useState('');
@@ -446,14 +445,23 @@ export function LandingExperience() {
           className="rounded-[2rem] border border-hairline-strong bg-surface-card/90 p-4 shadow-glow backdrop-blur-xl sm:p-5"
         >
           <div className="rounded-[1.5rem] border border-white/10 bg-surface-elevated p-4 sm:p-5">
-            <div className="flex items-center justify-between gap-3">
-              <label className="text-sm font-semibold text-ink-soft" htmlFor="qq-url">
-                {activeSource === 'manual' ? t('manualSourceTitle') : activeSource === 'spotify' ? t('spotifyUrlLabel') : activeSource === 'netease' ? t('neteaseUrlLabel') : t('urlLabel')}
-              </label>
-              <button type="button" onClick={() => setShowSourcePicker(true)} className="rounded-full border border-karaoke-cyan/25 bg-karaoke-cyan/10 px-3 py-1.5 text-xs font-black text-karaoke-cyan">
-                {t('chooseSource')}
-              </button>
+            <div className="flex flex-wrap gap-2">
+              {(['qq', 'spotify', 'netease', 'manual'] as const).map((source) => (
+                <button
+                  key={source}
+                  type="button"
+                  onClick={() => setActiveSource(source)}
+                  className={`rounded-full px-3.5 py-1.5 text-xs font-black transition ${
+                    activeSource === source
+                      ? 'bg-karaoke-cyan text-canvas shadow-[0_0_12px_rgba(85,230,255,0.3)]'
+                      : 'border border-white/10 bg-white/[0.04] text-ink-soft hover:bg-white/[0.08]'
+                  }`}
+                >
+                  {t(`sources.${source}.title`)}
+                </button>
+              ))}
             </div>
+            <p className="mt-2 text-xs leading-5 text-body-muted">{t(`sources.${activeSource}.body`)}</p>
             {activeSource !== 'manual' ? (
               <input
                 id="qq-url"
@@ -461,12 +469,11 @@ export function LandingExperience() {
                 onChange={(event) => setUrl(event.target.value)}
                 disabled={status === 'loading'}
                 placeholder={activeSource === 'spotify' ? t('spotifyUrlPlaceholder') : activeSource === 'netease' ? t('neteaseUrlPlaceholder') : t('urlPlaceholder')}
-                className="mt-2 h-12 w-full rounded-2xl border border-hairline-strong bg-black/35 px-4 text-sm text-white outline-none transition placeholder:text-body-muted focus:border-karaoke/70 focus:shadow-[0_0_0_4px_rgba(255,61,139,0.12)]"
+                className="mt-3 h-12 w-full rounded-2xl border border-hairline-strong bg-black/35 px-4 text-sm text-white outline-none transition placeholder:text-body-muted focus:border-karaoke/70 focus:shadow-[0_0_0_4px_rgba(255,61,139,0.12)]"
               />
             ) : null}
-            {activeSource === 'spotify' ? <p className="mt-2 text-xs leading-5 text-body-muted">{t('spotifyExperimental')}</p> : null}
 
-            <label className="mt-5 block text-sm font-semibold text-ink-soft" htmlFor="song-text">
+            <label className="mt-4 block text-sm font-semibold text-ink-soft" htmlFor="song-text">
               {t('textLabel')}
             </label>
             <textarea
@@ -700,35 +707,6 @@ export function LandingExperience() {
         </motion.div>
       </section>
 
-
-      {showSourcePicker ? (
-        <div className="fixed inset-0 z-50 grid place-items-center bg-black/70 px-5 backdrop-blur-sm">
-          <div className="w-full max-w-md rounded-[2rem] border border-hairline-strong bg-surface-card p-5 shadow-glow">
-            <div className="flex items-center justify-between">
-              <h2 className="font-display text-2xl font-black tracking-[-0.05em]">{t('sourcePickerTitle')}</h2>
-              <button type="button" onClick={() => setShowSourcePicker(false)} className="rounded-full border border-white/10 px-3 py-1 text-xs text-ink-soft">
-                {t('close')}
-              </button>
-            </div>
-            <div className="mt-4 grid gap-3">
-              {(['qq', 'spotify', 'netease', 'manual'] as const).map((source) => (
-                <button
-                  key={source}
-                  type="button"
-                  onClick={() => {
-                    setActiveSource(source);
-                    setShowSourcePicker(false);
-                  }}
-                  className={`rounded-3xl border p-4 text-left transition ${activeSource === source ? 'border-karaoke-cyan/50 bg-karaoke-cyan/10' : 'border-white/10 bg-white/[0.04]'}`}
-                >
-                  <span className="block text-sm font-black text-white">{t(`sources.${source}.title`)}</span>
-                  <span className="mt-1 block text-xs leading-5 text-body-muted">{t(`sources.${source}.body`)}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      ) : null}
     </main>
   );
 }

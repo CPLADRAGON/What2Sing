@@ -107,7 +107,7 @@
     "title": "Pick",
     "loading": "Loading your songs...",
     "emptyTitle": "Import songs first",
-    "emptyBody": "Paste a QQ Music link or song text on the import page, then come back here to swipe through the deck.",
+    "emptyBody": "Import a playlist or paste song text on the import page, then come back here to swipe through the deck.",
     "backToImport": "Import",
     "saveAndExit": "Save & exit",
     "saved": "Progress saved",

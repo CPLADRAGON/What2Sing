@@ -33,10 +33,10 @@ describe('landing mobile navigation', () => {
     expect(source).toContain("displayName ? (");
   });
 
-  it('offers an import source popup with QQ, Spotify, NetEase, and manual paste', () => {
+  it('offers inline source tabs for QQ, Spotify, NetEase, and manual paste', () => {
     const source = readFileSync('src/components/landing/landing-experience.tsx', 'utf8');
 
-    expect(source).toContain('showSourcePicker');
+    expect(source).toContain('setActiveSource');
     expect(source).toContain("activeSource === 'spotify'");
     expect(source).toContain("activeSource === 'netease'");
     expect(source).toContain("activeSource === 'manual'");

@@ -228,7 +228,7 @@ function isImportedSong(value: unknown): value is ImportedSong {
     song.title.trim().length > 0 &&
     typeof song.artist === 'string' &&
     song.artist.trim().length > 0 &&
-    (song.platform === 'qq' || song.platform === 'spotify' || song.platform === 'manual') &&
+    (song.platform === 'qq' || song.platform === 'spotify' || song.platform === 'netease' || song.platform === 'manual') &&
     Array.isArray(song.tags)
   );
 }

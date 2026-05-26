@@ -107,7 +107,7 @@
     "title": "筛歌",
     "loading": "正在加载歌单...",
     "emptyTitle": "请先导入歌曲",
-    "emptyBody": "回到导入页粘贴 QQ 音乐链接或歌曲文本，然后再来这里滑动筛选。",
+    "emptyBody": "回到导入页粘贴歌单链接或歌曲文本，然后再来这里滑动筛选。",
     "backToImport": "导入",
     "saveAndExit": "保存退出",
     "saved": "已保存进度",
