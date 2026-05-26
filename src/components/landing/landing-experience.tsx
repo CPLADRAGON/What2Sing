@@ -10,7 +10,7 @@ import {normalizeSongs} from '@/lib/importers/manual';
 import type {ImportedSong} from '@/lib/importers/qq';
 import {loadLatestPickerStateForCurrentUser, saveImportedDeckForCurrentUser, saveLibraryForCurrentUser, savePickerStateForCurrentUser, chooseSyncedLibrary, loadLibraryForCurrentUser} from '@/lib/picker/persistence';
 import {generateSingingOrder, pickRandomSong} from '@/lib/picker/queue';
-import {addSongsToLibrary, createLibrary, deserializeLibrary, getSongsForBatch, LIBRARY_STORAGE_KEY, migrateFromLegacyPickerState, quickAddPickedSong, removePickedSongFromLibrary, removeBatchFromLibrary, serializeLibrary, type ImportBatch, type SongLibrary} from '@/lib/picker/library';
+import {addSongsToLibrary, createLibrary, deserializeLibrary, getSongsForBatch, LIBRARY_STORAGE_KEY, migrateFromLegacyPickerState, quickAddPickedSong, removePickedSongFromLibrary, removeBatchFromLibrary, removeSongFromLibrary, serializeLibrary, type ImportBatch, type SongLibrary} from '@/lib/picker/library';
 import {chooseSyncedPickerState, createPickerState, deserializePickerState, getBatchProgress, loadBatchSessions, PICKER_STORAGE_KEY, removeBatchSession, saveBatchSession, serializePickerState, type BatchSessionMap} from '@/lib/picker/session';
 import {supabase} from '@/lib/supabase';
 
@@ -28,7 +28,6 @@ export function LandingExperience() {
   const [songs, setSongs] = useState<ImportedSong[]>([]);
   const [status, setStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
   const [message, setMessage] = useState('');
-  const [hasSavedProgress, setHasSavedProgress] = useState(false);
   const [library, setLibrary] = useState<SongLibrary | null>(null);
   const savedLikedSongs = useMemo(() => library?.pickedSongs ?? [], [library]);
   const importBatches = useMemo(() => library?.batches ?? [], [library]);
@@ -43,6 +42,8 @@ export function LandingExperience() {
   const [activeTab, setActiveTab] = useState<'selected' | 'imported'>('selected');
   const [exportMessage, setExportMessage] = useState('');
   const [batchSessions, setBatchSessions] = useState<BatchSessionMap>({});
+  const [expandedBatches, setExpandedBatches] = useState<Set<string>>(new Set());
+  const [librarySearch, setLibrarySearch] = useState('');
   const queueCardRef = useRef<HTMLDivElement>(null);
   const steps = t.raw('steps') as string[];
   const loadingSteps = t.raw('loadingSteps') as string[];
@@ -61,7 +62,6 @@ export function LandingExperience() {
 
       if (savedState) {
         window.localStorage.setItem(PICKER_STORAGE_KEY, serializePickerState(savedState));
-        setHasSavedProgress(savedState.currentIndex > 0 || savedState.liked.length > 0 || savedState.skipped.length > 0);
       }
 
       const localLib = deserializeLibrary(window.localStorage.getItem(LIBRARY_STORAGE_KEY));
@@ -138,6 +138,11 @@ export function LandingExperience() {
   }
 
   function handleDeleteBatch(batchId: string) {
+    const batch = importBatches.find((b) => b.id === batchId);
+    if (!window.confirm(t('confirmDeleteBatch', {count: batch?.songCount ?? 0}))) {
+      return;
+    }
+
     const currentLib = library ?? createLibrary();
     const updated = removeBatchFromLibrary(currentLib, batchId);
     window.localStorage.setItem(LIBRARY_STORAGE_KEY, serializeLibrary(updated));
@@ -148,7 +153,23 @@ export function LandingExperience() {
     setBatchSessions(loadBatchSessions());
   }
 
+  function handleRemoveSongFromBatch(song: ImportedSong) {
+    if (!window.confirm(t('confirmRemoveSong'))) {
+      return;
+    }
+
+    const currentLib = library ?? createLibrary();
+    const updated = removeSongFromLibrary(currentLib, song);
+    window.localStorage.setItem(LIBRARY_STORAGE_KEY, serializeLibrary(updated));
+    setLibrary(updated);
+    void saveLibraryForCurrentUser(updated);
+  }
+
   function handleRemovePickedSong(index: number) {
+    if (!window.confirm(t('confirmRemoveSong'))) {
+      return;
+    }
+
     const currentLib = library ?? createLibrary();
     const removedSong = currentLib.pickedSongs[index];
     const updated = removePickedSongFromLibrary(currentLib, index);
@@ -206,17 +227,11 @@ export function LandingExperience() {
     link.click();
   }
 
-  function handleStartFresh() {
-    window.localStorage.removeItem(PICKER_STORAGE_KEY);
-    setSongs([]);
-    setHasSavedProgress(false);
-    setGeneratedQueue([]);
-    setRandomSong(null);
-    setStatus('idle');
-    setMessage('');
-  }
-
   function handleClearLibrary() {
+    if (!window.confirm(t('confirmClearLibrary'))) {
+      return;
+    }
+
     window.localStorage.removeItem(PICKER_STORAGE_KEY);
     window.localStorage.removeItem(LIBRARY_STORAGE_KEY);
     window.localStorage.removeItem('ktv-picker:batch-sessions');
@@ -225,7 +240,6 @@ export function LandingExperience() {
     setLibrary(null);
     setBatchSessions({});
     setSongs([]);
-    setHasSavedProgress(false);
     setGeneratedQueue([]);
     setRandomSong(null);
     setStatus('idle');
@@ -338,7 +352,6 @@ export function LandingExperience() {
         await saveImportedDeckForCurrentUser(batchSongs);
         setSongs(batchSongs);
       }
-      setHasSavedProgress(false);
 
       setStatus('done');
       setMessage(libResult.duplicatesSkipped > 0
@@ -402,37 +415,6 @@ export function LandingExperience() {
               </div>
             ))}
           </div>
-          {hasSavedProgress ? (
-            <div className="mt-5 rounded-3xl border border-karaoke-cyan/25 bg-karaoke-cyan/10 p-4 sm:max-w-lg">
-              <p className="text-sm text-ink-soft">{t('savedProgress')}</p>
-              {savedLikedSongs.length ? (
-                <div className="mt-3 space-y-2">
-                  {savedLikedSongs.slice(0, 3).map((song, index) => (
-                    <div key={`${song.title}-${song.artist}-${index}`} className="rounded-2xl border border-karaoke-cyan/20 bg-black/20 px-3 py-2">
-                      <p className="text-sm font-bold text-white">{song.title}</p>
-                      <p className="text-xs text-body-muted">{song.artist}</p>
-                    </div>
-                  ))}
-                </div>
-              ) : null}
-              <div className="mt-3 grid grid-cols-2 gap-3">
-                <button type="button" onClick={() => router.push(`/${locale}/pick`)} className="h-11 rounded-2xl bg-karaoke-cyan px-5 text-sm font-black text-canvas">
-                  {t('resumePicking')}
-                </button>
-                <button type="button" onClick={() => router.push(`/${locale}/pick?view=queue`)} className="h-11 rounded-2xl border border-karaoke-cyan/25 bg-white/[0.04] px-5 text-sm font-black text-karaoke-cyan">
-                  {t('viewQueue')}
-                </button>
-              </div>
-              <div className="mt-2 grid grid-cols-2 gap-2">
-                <button type="button" onClick={handleStartFresh} className="h-10 rounded-2xl border border-karaoke/25 bg-karaoke/10 text-xs font-black text-karaoke transition hover:bg-karaoke/20">
-                  {t('startFresh')}
-                </button>
-                <button type="button" onClick={handleClearLibrary} className="h-10 rounded-2xl border border-white/15 bg-white/[0.04] text-xs font-black text-body-muted transition hover:border-karaoke/30 hover:bg-karaoke/10 hover:text-karaoke">
-                  {t('clearLibrary')}
-                </button>
-              </div>
-            </div>
-          ) : null}
         </motion.div>
 
         <motion.div
@@ -576,6 +558,21 @@ export function LandingExperience() {
                       </button>
                     </div>
 
+                    {/* ── Search input ── */}
+                    <div className="relative mb-3">
+                      <input
+                        value={librarySearch}
+                        onChange={(event) => setLibrarySearch(event.target.value)}
+                        placeholder={t('searchPlaceholder')}
+                        className="h-9 w-full rounded-xl border border-white/10 bg-black/35 pl-3 pr-8 text-xs text-white outline-none transition placeholder:text-body-muted focus:border-karaoke-cyan/50"
+                      />
+                      {librarySearch ? (
+                        <button type="button" onClick={() => setLibrarySearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-body-muted transition hover:text-white">
+                          <span className="text-xs">✕</span>
+                        </button>
+                      ) : null}
+                    </div>
+
                     {/* ── Selected tab ── */}
                     {activeTab === 'selected' ? (
                       <div>
@@ -635,7 +632,15 @@ export function LandingExperience() {
                             ) : null}
 
                             <div className="mt-3 max-h-[400px] space-y-1.5 overflow-y-auto">
-                              {savedLikedSongs.map((song, index) => (
+                              {savedLikedSongs.map((song, index) => {
+                                if (librarySearch) {
+                                  const q = librarySearch.toLowerCase();
+                                  if (!song.title.toLowerCase().includes(q) && !song.artist.toLowerCase().includes(q)) {
+                                    return null;
+                                  }
+                                }
+
+                                return (
                                 <div key={`p-${song.title}-${song.artist}-${index}`} className="group flex items-center justify-between rounded-xl border border-white/8 bg-white/[0.035] px-3 py-2.5">
                                   <div className="min-w-0 flex-1">
                                     <p className="text-sm font-bold text-white">{song.title}</p>
@@ -648,7 +653,8 @@ export function LandingExperience() {
                                     </button>
                                   </div>
                                 </div>
-                              ))}
+                                );
+                              })}
                             </div>
                           </>
                         ) : (
@@ -668,15 +674,20 @@ export function LandingExperience() {
                               const hasProgress = progress && progress.swiped > 0;
                               const isComplete = progress?.complete ?? false;
                               const pct = progress ? Math.round((progress.swiped / progress.total) * 100) : 0;
+                              const isExpanded = expandedBatches.has(batch.id);
+                              const batchSongs = isExpanded ? getSongsForBatch(library, batch.id) : [];
+                              const filteredBatchSongs = librarySearch
+                                ? batchSongs.filter((s) => s.title.toLowerCase().includes(librarySearch.toLowerCase()) || s.artist.toLowerCase().includes(librarySearch.toLowerCase()))
+                                : batchSongs;
 
                               return (
                                 <div key={batch.id} className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03]">
                                   <div className="p-3.5">
                                     <div className="flex items-start justify-between gap-2">
-                                      <div className="min-w-0 flex-1">
-                                        <p className="text-sm font-black text-white">{batch.label}</p>
+                                      <button type="button" onClick={() => setExpandedBatches((prev) => {const next = new Set(prev); if (next.has(batch.id)) next.delete(batch.id); else next.add(batch.id); return next;})} className="min-w-0 flex-1 text-left">
+                                        <p className="text-sm font-black text-white">{batch.label} <span className="text-body-muted">{isExpanded ? '▲' : '▼'}</span></p>
                                         <p className="mt-0.5 text-[10px] text-body-muted">{batch.songCount} songs</p>
-                                      </div>
+                                      </button>
                                       <div className="flex shrink-0 items-center gap-1.5">
                                         {isComplete ? (
                                           <span className="rounded-full bg-karaoke-cyan/15 px-2.5 py-1 text-[10px] font-black text-karaoke-cyan">{t('batchComplete')}</span>
@@ -710,6 +721,25 @@ export function LandingExperience() {
                                         </button>
                                       ) : null}
                                     </div>
+
+                                    {isExpanded && filteredBatchSongs.length > 0 ? (
+                                      <div className="mt-3 max-h-[300px] space-y-1.5 overflow-y-auto border-t border-white/5 pt-3">
+                                        {filteredBatchSongs.map((song, index) => (
+                                          <div key={`b-${batch.id}-${song.title}-${song.artist}-${index}`} className="group flex items-center justify-between rounded-xl border border-white/8 bg-white/[0.035] px-3 py-2.5">
+                                            <div className="min-w-0 flex-1">
+                                              <p className="text-sm font-bold text-white">{song.title}</p>
+                                              <p className="text-xs text-body-muted">{song.artist}</p>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                              <span className="shrink-0 rounded-full bg-white/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] text-ink-soft">{song.platform}</span>
+                                              <button type="button" onClick={() => handleRemoveSongFromBatch(song)} className="hidden shrink-0 rounded-full border border-karaoke/20 bg-karaoke/10 px-2 py-1 text-[10px] font-black text-karaoke transition hover:bg-karaoke/20 group-hover:block">
+                                                {t('removeSong')}
+                                              </button>
+                                            </div>
+                                          </div>
+                                        ))}
+                                      </div>
+                                    ) : null}
                                   </div>
                                 </div>
                               );
