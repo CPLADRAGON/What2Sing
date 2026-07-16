@@ -1,9 +1,17 @@
-import {readFileSync} from 'node:fs';
+import {readdirSync, readFileSync} from 'node:fs';
+import {join} from 'node:path';
 import {describe, expect, it} from 'vitest';
+
+function readDir(dir: string): string {
+  return readdirSync(dir)
+    .filter((f) => f.endsWith('.ts') || f.endsWith('.tsx'))
+    .map((f) => readFileSync(join(dir, f), 'utf8'))
+    .join('\n');
+}
 
 describe('physical deck swipe effects', () => {
   it('lifts the active card and animates the waiting deck while dragging', () => {
-    const source = readFileSync('src/components/picker/picker-experience.tsx', 'utf8');
+    const source = readDir('src\\components\\picker');
 
     expect(source).toContain('dragLift');
     expect(source).toContain('deckLift');
@@ -12,7 +20,7 @@ describe('physical deck swipe effects', () => {
   });
 
   it('shows decision feedback after a pick or skip', () => {
-    const source = readFileSync('src/components/picker/picker-experience.tsx', 'utf8');
+    const source = readDir('src\\components\\picker');
 
     expect(source).toContain('feedbackMessage');
     expect(source).toContain("t('pickedFeedback')");
@@ -20,7 +28,7 @@ describe('physical deck swipe effects', () => {
   });
 
   it('locks each exit animation to the current swipe direction before advancing', () => {
-    const source = readFileSync('src/components/picker/picker-experience.tsx', 'utf8');
+    const source = readDir('src\\components\\picker');
 
     expect(source).toContain('flushSync');
     expect(source).toContain('const exitDirection = decision ===');
@@ -29,7 +37,7 @@ describe('physical deck swipe effects', () => {
   });
 
   it('flings the outgoing card before advancing to the next song', () => {
-    const source = readFileSync('src/components/picker/picker-experience.tsx', 'utf8');
+    const source = readDir('src\\components\\picker');
 
     expect(source).toContain('flingRef.current = animate(x, exitDirection * 620');
     expect(source).toContain('const swipeExitDurationMs');
@@ -42,7 +50,7 @@ describe('physical deck swipe effects', () => {
   });
 
   it('offers order controls after resuming saved picking progress', () => {
-    const source = readFileSync('src/components/picker/picker-experience.tsx', 'utf8');
+    const source = readDir('src\\components\\picker');
 
     expect(source).toContain('reorderRemainingSongs');
     expect(source).toContain('changeRemainingOrder');
@@ -52,7 +60,7 @@ describe('physical deck swipe effects', () => {
   });
 
   it('animates repeated shuffles and resets the visible card motion when order changes', () => {
-    const source = readFileSync('src/components/picker/picker-experience.tsx', 'utf8');
+    const source = readDir('src\\components\\picker');
 
     expect(source).toContain('shuffleAnimationKey');
     expect(source).toContain('isShufflingDeck');
@@ -62,7 +70,7 @@ describe('physical deck swipe effects', () => {
   });
 
   it('adds richer drag feedback cues beyond the basic stamps', () => {
-    const source = readFileSync('src/components/picker/picker-experience.tsx', 'utf8');
+    const source = readDir('src\\components\\picker');
 
     expect(source).toContain('likeScale');
     expect(source).toContain('skipScale');
@@ -70,14 +78,14 @@ describe('physical deck swipe effects', () => {
   });
 
   it('washes the background with directional color during drag', () => {
-    const source = readFileSync('src/components/picker/picker-experience.tsx', 'utf8');
+    const source = readDir('src\\components\\picker');
 
     expect(source).toContain('bgWashSkip');
     expect(source).toContain('bgWashLike');
   });
 
   it('triggers haptic feedback at drag thresholds', () => {
-    const source = readFileSync('src/components/picker/picker-experience.tsx', 'utf8');
+    const source = readDir('src\\components\\picker');
 
     expect(source).toContain('lastHapticThreshold');
     expect(source).toContain('handleDrag');
@@ -85,7 +93,7 @@ describe('physical deck swipe effects', () => {
   });
 
   it('staggers card content reveal and wobbles the incoming card', () => {
-    const source = readFileSync('src/components/picker/picker-experience.tsx', 'utf8');
+    const source = readDir('src\\components\\picker');
 
     expect(source).toContain("transition={{delay: 0.06");
     expect(source).toContain("transition={{delay: 0.1");

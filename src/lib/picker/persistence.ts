@@ -1,4 +1,5 @@
 import type {ImportedSong} from '@/lib/importers/qq';
+import {safeGetItem, safeRemoveItem, safeSetItem} from '@/lib/safe-storage';
 import {supabase} from '@/lib/supabase';
 import {deserializeLibrary, LIBRARY_STORAGE_KEY, serializeLibrary, type SongLibrary} from './library';
 import {deserializePickerState, PICKER_STORAGE_KEY, type PickerState} from './session';
@@ -61,7 +62,7 @@ export async function loadLatestPickerStateForCurrentUser(): Promise<RemotePicke
     return null;
   }
 
-  window.localStorage.setItem(SUPABASE_SESSION_ID_KEY, data.id);
+  safeSetItem(SUPABASE_SESSION_ID_KEY, data.id);
   return {state, id: data.id};
 }
 
@@ -91,7 +92,7 @@ export async function saveImportedDeckForCurrentUser(songs: ImportedSong[]): Pro
     return {saved: false, reason: 'signed-out'};
   }
 
-  const existingId = window.localStorage.getItem(SUPABASE_SESSION_ID_KEY);
+  const existingId = safeGetItem(SUPABASE_SESSION_ID_KEY);
   const payload = {
     user_id: user.id,
     name: 'Imported deck',
@@ -121,7 +122,7 @@ export async function saveImportedDeckForCurrentUser(songs: ImportedSong[]): Pro
     return {saved: false, reason: 'database-error'};
   }
 
-  window.localStorage.setItem(SUPABASE_SESSION_ID_KEY, data.id as string);
+  safeSetItem(SUPABASE_SESSION_ID_KEY, data.id as string);
   return {saved: true, id: data.id as string};
 }
 
@@ -137,7 +138,7 @@ export async function savePickerStateForCurrentUser(state: PickerState): Promise
     return {saved: false, reason: 'signed-out'};
   }
 
-  const existingId = window.localStorage.getItem(SUPABASE_SESSION_ID_KEY);
+  const existingId = safeGetItem(SUPABASE_SESSION_ID_KEY);
   const payload = {
     user_id: user.id,
     name: 'KTV picker session',
@@ -163,13 +164,13 @@ export async function savePickerStateForCurrentUser(state: PickerState): Promise
     return {saved: false, reason: 'database-error'};
   }
 
-  window.localStorage.setItem(SUPABASE_SESSION_ID_KEY, data.id as string);
+  safeSetItem(SUPABASE_SESSION_ID_KEY, data.id as string);
   return {saved: true, id: data.id as string};
 }
 
 export function clearStoredPickerSessionIds() {
-  window.localStorage.removeItem(SUPABASE_SESSION_ID_KEY);
-  window.localStorage.removeItem(PICKER_STORAGE_KEY);
+  safeRemoveItem(SUPABASE_SESSION_ID_KEY);
+  safeRemoveItem(PICKER_STORAGE_KEY);
 }
 
 export async function loadLibraryForCurrentUser(): Promise<SongLibrary | null> {

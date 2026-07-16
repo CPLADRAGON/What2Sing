@@ -1,6 +1,6 @@
 'use client';
 
-import {motion} from 'framer-motion';
+import {motion, useReducedMotion} from 'framer-motion';
 import {useLocale, useTranslations} from 'next-intl';
 import Link from 'next/link';
 import {useRouter} from 'next/navigation';
@@ -11,16 +11,26 @@ import type {ImportedSong} from '@/lib/importers/qq';
 import {loadLatestPickerStateForCurrentUser, saveImportedDeckForCurrentUser, saveLibraryForCurrentUser, savePickerStateForCurrentUser, chooseSyncedLibrary, loadLibraryForCurrentUser} from '@/lib/picker/persistence';
 import {generateSingingOrder, pickRandomSong} from '@/lib/picker/queue';
 import {addSongsToLibrary, createLibrary, deserializeLibrary, getSongsForBatch, LIBRARY_STORAGE_KEY, migrateFromLegacyPickerState, quickAddPickedSong, removePickedSongFromLibrary, removeBatchFromLibrary, removeSongFromLibrary, serializeLibrary, type ImportBatch, type SongLibrary} from '@/lib/picker/library';
-import {chooseSyncedPickerState, createPickerState, deserializePickerState, getBatchProgress, loadBatchSessions, PICKER_STORAGE_KEY, removeBatchSession, saveBatchSession, serializePickerState, type BatchSessionMap} from '@/lib/picker/session';
+import {chooseSyncedPickerState, createPickerState, deserializePickerState, loadBatchSessions, PICKER_STORAGE_KEY, removeBatchSession, saveBatchSession, serializePickerState, type BatchSessionMap} from '@/lib/picker/session';
+import {songKey} from '@/lib/picker/song-key';
+import {safeGetItem, safeRemoveItem, safeSetItem} from '@/lib/safe-storage';
 import {supabase} from '@/lib/supabase';
+import {ImportLoadingPanel} from './import-loading-panel';
+import {LibraryPanel} from './library-panel';
 
 const sampleSongs = '青花瓷 - 周杰伦\n后来 - 刘若英\n修炼爱情 - 林俊杰\n倔强 - 五月天';
 type ImportSource = 'qq' | 'spotify' | 'netease' | 'manual';
+type DuplicateImportSummary = {
+  added: number;
+  skipped: number;
+  total: number;
+};
 
 export function LandingExperience() {
   const t = useTranslations('landing');
   const locale = useLocale();
   const router = useRouter();
+  const prefersReducedMotion = useReducedMotion();
   const nextLocale = locale === 'zh' ? 'en' : 'zh';
   const [url, setUrl] = useState('');
   const [text, setText] = useState('');
@@ -28,6 +38,7 @@ export function LandingExperience() {
   const [songs, setSongs] = useState<ImportedSong[]>([]);
   const [status, setStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
   const [message, setMessage] = useState('');
+  const [duplicateImportSummary, setDuplicateImportSummary] = useState<DuplicateImportSummary | null>(null);
   const [library, setLibrary] = useState<SongLibrary | null>(null);
   const savedLikedSongs = useMemo(() => library?.pickedSongs ?? [], [library]);
   const importBatches = useMemo(() => library?.batches ?? [], [library]);
@@ -38,6 +49,7 @@ export function LandingExperience() {
   const [quickAddTitle, setQuickAddTitle] = useState('');
   const [quickAddArtist, setQuickAddArtist] = useState('');
   const [quickAddMessage, setQuickAddMessage] = useState('');
+  const [quickAddStatus, setQuickAddStatus] = useState<'idle' | 'success' | 'duplicate'>('idle');
   const [libraryExpanded, setLibraryExpanded] = useState(true);
   const [activeTab, setActiveTab] = useState<'selected' | 'imported'>('selected');
   const [exportMessage, setExportMessage] = useState('');
@@ -45,14 +57,26 @@ export function LandingExperience() {
   const [expandedBatches, setExpandedBatches] = useState<Set<string>>(new Set());
   const [librarySearch, setLibrarySearch] = useState('');
   const queueCardRef = useRef<HTMLDivElement>(null);
+  const exportMessageTimerRef = useRef<number | null>(null);
+  const quickAddMessageTimerRef = useRef<number | null>(null);
   const steps = t.raw('steps') as string[];
   const loadingSteps = t.raw('loadingSteps') as string[];
+  const queueText = useMemo(() => {
+    if (generatedQueue.length === 0) {
+      return '';
+    }
+
+    const header = t('exportQueueTitle');
+    const lines = generatedQueue.map((song, i) => `${i + 1}. ${song.title} - ${song.artist}`);
+    const footer = `-- ${t('exportBranding')}`;
+    return [header, ...lines, '', footer].join('\n');
+  }, [generatedQueue, t]);
 
   useEffect(() => {
     let isMounted = true;
 
     async function loadSavedProgress() {
-      const localState = deserializePickerState(window.localStorage.getItem(PICKER_STORAGE_KEY));
+      const localState = deserializePickerState(safeGetItem(PICKER_STORAGE_KEY));
       const remoteSession = await loadLatestPickerStateForCurrentUser();
       const savedState = chooseSyncedPickerState(localState, remoteSession?.state ?? null);
 
@@ -61,10 +85,10 @@ export function LandingExperience() {
       }
 
       if (savedState) {
-        window.localStorage.setItem(PICKER_STORAGE_KEY, serializePickerState(savedState));
+        safeSetItem(PICKER_STORAGE_KEY, serializePickerState(savedState));
       }
 
-      const localLib = deserializeLibrary(window.localStorage.getItem(LIBRARY_STORAGE_KEY));
+      const localLib = deserializeLibrary(safeGetItem(LIBRARY_STORAGE_KEY));
       const remoteLib = await loadLibraryForCurrentUser();
       let lib = chooseSyncedLibrary(localLib, remoteLib);
 
@@ -74,7 +98,7 @@ export function LandingExperience() {
       }
 
       if (lib) {
-        window.localStorage.setItem(LIBRARY_STORAGE_KEY, serializeLibrary(lib));
+        safeSetItem(LIBRARY_STORAGE_KEY, serializeLibrary(lib));
         setLibrary(lib);
       }
 
@@ -103,6 +127,28 @@ export function LandingExperience() {
     return () => subscription.subscription.unsubscribe();
   }, []);
 
+  useEffect(() => () => {
+    [exportMessageTimerRef, quickAddMessageTimerRef].forEach((timerRef) => {
+      if (timerRef.current !== null) {
+        window.clearTimeout(timerRef.current);
+      }
+    });
+  }, []);
+
+  function showQuickAddMessage(nextMessage: string, nextStatus: 'success' | 'duplicate') {
+    if (quickAddMessageTimerRef.current !== null) {
+      window.clearTimeout(quickAddMessageTimerRef.current);
+    }
+
+    setQuickAddMessage(nextMessage);
+    setQuickAddStatus(nextStatus);
+    quickAddMessageTimerRef.current = window.setTimeout(() => {
+      setQuickAddMessage('');
+      setQuickAddStatus('idle');
+      quickAddMessageTimerRef.current = null;
+    }, 2400);
+  }
+
   function generateLandingQueue() {
     setGeneratedQueue(generateSingingOrder(savedLikedSongs, {limit: queueLimit, seed: `${Date.now()}-${savedLikedSongs.length}`}));
     setRandomSong(null);
@@ -125,16 +171,16 @@ export function LandingExperience() {
     const result = quickAddPickedSong(currentLib, song);
 
     if (!result.added) {
-      setQuickAddMessage(t('quickAddDuplicate'));
+      showQuickAddMessage(t('quickAddDuplicate'), 'duplicate');
       return;
     }
 
-    window.localStorage.setItem(LIBRARY_STORAGE_KEY, serializeLibrary(result.library));
+    safeSetItem(LIBRARY_STORAGE_KEY, serializeLibrary(result.library));
     setLibrary(result.library);
     void saveLibraryForCurrentUser(result.library);
     setQuickAddTitle('');
     setQuickAddArtist('');
-    setQuickAddMessage(t('quickAddSuccess', {title}));
+    showQuickAddMessage(t('quickAddSuccess', {title}), 'success');
   }
 
   function handleDeleteBatch(batchId: string) {
@@ -145,7 +191,7 @@ export function LandingExperience() {
 
     const currentLib = library ?? createLibrary();
     const updated = removeBatchFromLibrary(currentLib, batchId);
-    window.localStorage.setItem(LIBRARY_STORAGE_KEY, serializeLibrary(updated));
+    safeSetItem(LIBRARY_STORAGE_KEY, serializeLibrary(updated));
     setLibrary(updated);
     void saveLibraryForCurrentUser(updated);
 
@@ -160,7 +206,7 @@ export function LandingExperience() {
 
     const currentLib = library ?? createLibrary();
     const updated = removeSongFromLibrary(currentLib, song);
-    window.localStorage.setItem(LIBRARY_STORAGE_KEY, serializeLibrary(updated));
+    safeSetItem(LIBRARY_STORAGE_KEY, serializeLibrary(updated));
     setLibrary(updated);
     void saveLibraryForCurrentUser(updated);
   }
@@ -173,40 +219,42 @@ export function LandingExperience() {
     const currentLib = library ?? createLibrary();
     const removedSong = currentLib.pickedSongs[index];
     const updated = removePickedSongFromLibrary(currentLib, index);
-    window.localStorage.setItem(LIBRARY_STORAGE_KEY, serializeLibrary(updated));
+    safeSetItem(LIBRARY_STORAGE_KEY, serializeLibrary(updated));
     setLibrary(updated);
     void saveLibraryForCurrentUser(updated);
 
     if (removedSong) {
-      const removedKey = `${removedSong.title.trim().toLowerCase()}::${removedSong.artist.trim().toLowerCase()}`;
-      const localState = deserializePickerState(window.localStorage.getItem(PICKER_STORAGE_KEY));
+      const removedKey = songKey(removedSong);
+      const localState = deserializePickerState(safeGetItem(PICKER_STORAGE_KEY));
 
       if (localState) {
-        const filteredLiked = localState.liked.filter((s) => `${s.title.trim().toLowerCase()}::${s.artist.trim().toLowerCase()}` !== removedKey);
+        const filteredLiked = localState.liked.filter((s) => songKey(s) !== removedKey);
 
         if (filteredLiked.length !== localState.liked.length) {
           const updatedState = {...localState, liked: filteredLiked, updatedAt: new Date().toISOString()};
-          window.localStorage.setItem(PICKER_STORAGE_KEY, serializePickerState(updatedState));
+          safeSetItem(PICKER_STORAGE_KEY, serializePickerState(updatedState));
           void savePickerStateForCurrentUser(updatedState);
         }
       }
 
-      setGeneratedQueue((q) => q.filter((s) => `${s.title.trim().toLowerCase()}::${s.artist.trim().toLowerCase()}` !== removedKey));
+      setGeneratedQueue((q) => q.filter((s) => songKey(s) !== removedKey));
     }
   }
 
   function handleCopyQueueText() {
-    if (generatedQueue.length === 0) {
+    if (!queueText) {
       return;
     }
 
-    const header = t('exportQueueTitle');
-    const lines = generatedQueue.map((song, i) => `${i + 1}. ${song.title} - ${song.artist}`);
-    const footer = `-- ${t('exportBranding')}`;
-    const text = [header, ...lines, '', footer].join('\n');
-    void navigator.clipboard.writeText(text).then(() => {
+    void navigator.clipboard.writeText(queueText).then(() => {
+      if (exportMessageTimerRef.current !== null) {
+        window.clearTimeout(exportMessageTimerRef.current);
+      }
       setExportMessage(t('exportCopied'));
-      setTimeout(() => setExportMessage(''), 2000);
+      exportMessageTimerRef.current = window.setTimeout(() => {
+        setExportMessage('');
+        exportMessageTimerRef.current = null;
+      }, 2000);
     });
   }
 
@@ -232,9 +280,9 @@ export function LandingExperience() {
       return;
     }
 
-    window.localStorage.removeItem(PICKER_STORAGE_KEY);
-    window.localStorage.removeItem(LIBRARY_STORAGE_KEY);
-    window.localStorage.removeItem('ktv-picker:batch-sessions');
+    safeRemoveItem(PICKER_STORAGE_KEY);
+    safeRemoveItem(LIBRARY_STORAGE_KEY);
+    safeRemoveItem('ktv-picker:batch-sessions');
     const emptyLib = {songs: [], batches: [], pickedSongs: [], updatedAt: new Date().toISOString()};
     void saveLibraryForCurrentUser(emptyLib);
     setLibrary(null);
@@ -244,6 +292,7 @@ export function LandingExperience() {
     setRandomSong(null);
     setStatus('idle');
     setMessage('');
+    setDuplicateImportSummary(null);
   }
 
   async function handlePickBatch(batchId: string) {
@@ -260,7 +309,7 @@ export function LandingExperience() {
     // Resume existing session or create fresh
     const existingSession = batchSessions[batchId];
     const session = existingSession ?? createPickerState(batchSongs);
-    window.localStorage.setItem(PICKER_STORAGE_KEY, serializePickerState(session));
+    safeSetItem(PICKER_STORAGE_KEY, serializePickerState(session));
     saveBatchSession(batchId, session);
     setBatchSessions(loadBatchSessions());
     await savePickerStateForCurrentUser(session);
@@ -293,6 +342,7 @@ export function LandingExperience() {
 
   async function handleImport() {
     setMessage('');
+    setDuplicateImportSummary(null);
 
     const manualSongs = normalizeSongs(text);
 
@@ -307,9 +357,10 @@ export function LandingExperience() {
     try {
       let importedSongs: ImportedSong[] = [];
       const controller = new AbortController();
-      const timeout = window.setTimeout(() => controller.abort(), 20000);
 
       if (activeSource !== 'manual' && url.trim()) {
+        const timeout = window.setTimeout(() => controller.abort(), 20000);
+
         try {
           const response = await fetch(`/api/import/${activeSource}`, {
             method: 'POST',
@@ -334,7 +385,7 @@ export function LandingExperience() {
 
       const currentLib = library ?? createLibrary();
       const libResult = addSongsToLibrary(currentLib, nextSongs, batchLabel);
-      window.localStorage.setItem(LIBRARY_STORAGE_KEY, serializeLibrary(libResult.library));
+      safeSetItem(LIBRARY_STORAGE_KEY, serializeLibrary(libResult.library));
       setLibrary(libResult.library);
       void saveLibraryForCurrentUser(libResult.library);
 
@@ -348,12 +399,15 @@ export function LandingExperience() {
         setBatchSessions(loadBatchSessions());
 
         // Also set as active picker state
-        window.localStorage.setItem(PICKER_STORAGE_KEY, serializePickerState(freshBatchState));
+        safeSetItem(PICKER_STORAGE_KEY, serializePickerState(freshBatchState));
         await saveImportedDeckForCurrentUser(batchSongs);
         setSongs(batchSongs);
       }
 
       setStatus('done');
+      setDuplicateImportSummary(libResult.duplicatesSkipped > 0
+        ? {added: libResult.added, skipped: libResult.duplicatesSkipped, total: libResult.library.songs.length}
+        : null);
       setMessage(libResult.duplicatesSkipped > 0
         ? t('importedWithDuplicates', {added: libResult.added, skipped: libResult.duplicatesSkipped, total: libResult.library.songs.length})
         : t('imported', {count: libResult.added}));
@@ -396,7 +450,7 @@ export function LandingExperience() {
       </nav>
 
       <section className="relative z-10 mx-auto grid max-w-6xl gap-10 pb-12 pt-12 lg:grid-cols-[1.04fr_0.96fr] lg:items-center lg:pb-20 lg:pt-20">
-        <motion.div initial={{opacity: 0, y: 22}} animate={{opacity: 1, y: 0}} transition={{duration: 0.65}}>
+        <motion.div initial={prefersReducedMotion ? false : {opacity: 0, y: 22}} animate={{opacity: 1, y: 0}} transition={prefersReducedMotion ? {duration: 0} : {duration: 0.65}}>
           <div className="mb-5 inline-flex rounded-full border border-karaoke/30 bg-karaoke/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-karaoke">
             {t('badge')}
           </div>
@@ -418,9 +472,9 @@ export function LandingExperience() {
         </motion.div>
 
         <motion.div
-          initial={{opacity: 0, scale: 0.96, y: 28}}
+          initial={prefersReducedMotion ? false : {opacity: 0, scale: 0.96, y: 28}}
           animate={{opacity: 1, scale: 1, y: 0}}
-          transition={{duration: 0.7, delay: 0.1}}
+          transition={prefersReducedMotion ? {duration: 0} : {duration: 0.7, delay: 0.1}}
           className="rounded-[2rem] border border-hairline-strong bg-surface-card/90 p-4 shadow-glow backdrop-blur-xl sm:p-5"
         >
           <div className="rounded-[1.5rem] border border-white/10 bg-surface-elevated p-4 sm:p-5">
@@ -487,6 +541,22 @@ export function LandingExperience() {
             {message ? (
               <p className={`mt-3 text-sm ${status === 'error' ? 'text-karaoke' : 'text-karaoke-cyan'}`}>{message}</p>
             ) : null}
+            {duplicateImportSummary ? (
+              <div className="mt-3 grid grid-cols-3 gap-2 rounded-2xl border border-karaoke-cyan/20 bg-black/30 p-3">
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-body-muted">{t('importSummaryAdded')}</p>
+                  <p className="mt-1 text-lg font-black text-white">{duplicateImportSummary.added}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-body-muted">{t('importSummarySkippedDuplicates')}</p>
+                  <p className="mt-1 text-lg font-black text-karaoke">{duplicateImportSummary.skipped}</p>
+                </div>
+                <div>
+                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-body-muted">{t('importSummaryTotal')}</p>
+                  <p className="mt-1 text-lg font-black text-karaoke-cyan">{duplicateImportSummary.total}</p>
+                </div>
+              </div>
+            ) : null}
             {status === 'done' ? (
               <div className="mt-2 rounded-2xl border border-karaoke-cyan/20 bg-karaoke-cyan/10 p-3">
                 <p className="text-xs leading-5 text-ink-soft">{t('nextAfterImport')}</p>
@@ -525,280 +595,50 @@ export function LandingExperience() {
                 type="button"
                 onClick={handleQuickAdd}
                 disabled={!quickAddTitle.trim() || !quickAddArtist.trim()}
+                aria-label={t('quickAddAria')}
                 className="row-span-2 grid h-full min-h-10 w-10 place-items-center self-stretch rounded-xl bg-karaoke-cyan text-sm font-black text-canvas transition hover:scale-105 disabled:opacity-40 sm:row-span-1"
               >
                 +
               </button>
             </div>
             {quickAddMessage ? (
-              <p className={`mt-2 text-xs ${quickAddMessage.includes('!') ? 'text-karaoke-cyan' : 'text-body-muted'}`}>{quickAddMessage}</p>
+              <p className={`mt-2 text-xs ${quickAddStatus === 'success' ? 'text-karaoke-cyan' : 'text-body-muted'}`}>{quickAddMessage}</p>
             ) : null}
           </div>
 
-          <div className="mt-4 rounded-[1.5rem] border border-hairline-strong bg-black/30 p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <button type="button" onClick={() => setLibraryExpanded((v) => !v)} className="flex items-center gap-2">
-                <h2 className="text-sm font-black text-white">{t('libraryTitle')}</h2>
-              </button>
-              <button type="button" onClick={() => setLibraryExpanded((v) => !v)} className="text-xs text-body-muted">
-                {libraryExpanded ? '▲' : '▼'}
-              </button>
-            </div>
-            {libraryExpanded ? (
-              <>
-                {library && (library.songs.length > 0 || savedLikedSongs.length > 0) ? (
-                  <>
-                    {/* ── Tab bar ── */}
-                    <div className="mb-3 flex rounded-xl border border-white/10 bg-white/[0.03] p-0.5">
-                      <button type="button" onClick={() => setActiveTab('selected')} className={`flex-1 rounded-lg py-2 text-xs font-black transition ${activeTab === 'selected' ? 'bg-karaoke-cyan text-canvas' : 'text-ink-soft hover:text-white'}`}>
-                        {t('tabSelected')} ({savedLikedSongs.length})
-                      </button>
-                      <button type="button" onClick={() => setActiveTab('imported')} className={`flex-1 rounded-lg py-2 text-xs font-black transition ${activeTab === 'imported' ? 'bg-white text-canvas' : 'text-ink-soft hover:text-white'}`}>
-                        {t('tabImported')} ({library?.songs.length ?? 0})
-                      </button>
-                    </div>
-
-                    {/* ── Search input ── */}
-                    <div className="relative mb-3">
-                      <input
-                        value={librarySearch}
-                        onChange={(event) => setLibrarySearch(event.target.value)}
-                        placeholder={t('searchPlaceholder')}
-                        className="h-9 w-full rounded-xl border border-white/10 bg-black/35 pl-3 pr-8 text-xs text-white outline-none transition placeholder:text-body-muted focus:border-karaoke-cyan/50"
-                      />
-                      {librarySearch ? (
-                        <button type="button" onClick={() => setLibrarySearch('')} className="absolute right-2 top-1/2 -translate-y-1/2 text-body-muted transition hover:text-white">
-                          <span className="text-xs">✕</span>
-                        </button>
-                      ) : null}
-                    </div>
-
-                    {/* ── Selected tab ── */}
-                    {activeTab === 'selected' ? (
-                      <div>
-                        {savedLikedSongs.length > 0 ? (
-                          <>
-                            <div className="rounded-2xl border border-karaoke-cyan/20 bg-karaoke-cyan/10 p-3">
-                              <div className="grid grid-cols-3 gap-1.5">
-                                {(['all', 5, 10] as const).map((limit) => (
-                                  <button key={limit} type="button" onClick={() => setQueueLimit(limit)} className={`h-8 rounded-lg text-[10px] font-black transition ${queueLimit === limit ? 'bg-white text-canvas' : 'border border-white/10 bg-white/[0.04] text-ink-soft'}`}>
-                                    {limit === 'all' ? t('queueLimitAll') : limit}
-                                  </button>
-                                ))}
-                              </div>
-                              <div className="mt-2 grid grid-cols-2 gap-1.5">
-                                <button type="button" onClick={generateLandingQueue} className="h-9 rounded-lg bg-karaoke-cyan text-[10px] font-black text-canvas">
-                                  {t('generateQueue')}
-                                </button>
-                                <button type="button" onClick={pickLandingRandomSong} className="h-9 rounded-lg bg-white text-[10px] font-black text-canvas">
-                                  {t('pickOneRandom')}
-                                </button>
-                              </div>
-                              {randomSong ? (
-                                <div className="mt-2.5 rounded-xl border border-karaoke/30 bg-karaoke/10 px-3 py-2">
-                                  <p className="text-[10px] font-black uppercase tracking-[0.18em] text-karaoke">{t('nextSong')}</p>
-                                  <p className="mt-1 text-sm font-black text-white">{randomSong.title}</p>
-                                  <p className="text-xs text-body-muted">{randomSong.artist}</p>
-                                </div>
-                              ) : null}
-                            </div>
-
-                            {generatedQueue.length > 0 ? (
-                              <>
-                                <div ref={queueCardRef} className="mt-3 rounded-2xl border border-karaoke-cyan/15 bg-[#0a0a0f] p-4">
-                                  <p className="mb-3 text-xs font-black text-karaoke-cyan">{t('exportQueueTitle')}</p>
-                                  <div className="space-y-1.5">
-                                    {generatedQueue.map((song, index) => (
-                                      <div key={`q-${song.title}-${song.artist}-${index}`} className="flex items-center justify-between rounded-xl border border-karaoke-cyan/15 bg-white/[0.035] px-3 py-2.5">
-                                        <div className="min-w-0 flex-1">
-                                          <p className="text-sm font-bold text-white"><span className="mr-2 text-karaoke-cyan">#{index + 1}</span>{song.title}</p>
-                                          <p className="text-xs text-body-muted">{song.artist}</p>
-                                        </div>
-                                        <span className="shrink-0 rounded-full bg-white/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] text-ink-soft">{song.platform}</span>
-                                      </div>
-                                    ))}
-                                  </div>
-                                  <p className="mt-3 text-right text-[10px] text-body-muted">{t('exportBranding')}</p>
-                                </div>
-                                <div className="mt-2 grid grid-cols-2 gap-1.5">
-                                  <button type="button" onClick={handleCopyQueueText} className="h-9 rounded-lg border border-white/10 bg-white/[0.04] text-[10px] font-black text-ink-soft transition hover:bg-white/10">
-                                    {exportMessage || t('exportCopyText')}
-                                  </button>
-                                  <button type="button" onClick={() => void handleSaveQueueImage()} className="h-9 rounded-lg border border-white/10 bg-white/[0.04] text-[10px] font-black text-ink-soft transition hover:bg-white/10">
-                                    {t('exportSaveImage')}
-                                  </button>
-                                </div>
-                              </>
-                            ) : null}
-
-                            <div className="mt-3 max-h-[400px] space-y-1.5 overflow-y-auto">
-                              {savedLikedSongs.map((song, index) => {
-                                if (librarySearch) {
-                                  const q = librarySearch.toLowerCase();
-                                  if (!song.title.toLowerCase().includes(q) && !song.artist.toLowerCase().includes(q)) {
-                                    return null;
-                                  }
-                                }
-
-                                return (
-                                <div key={`p-${song.title}-${song.artist}-${index}`} className="group flex items-center justify-between rounded-xl border border-white/8 bg-white/[0.035] px-3 py-2.5">
-                                  <div className="min-w-0 flex-1">
-                                    <p className="text-sm font-bold text-white">{song.title}</p>
-                                    <p className="text-xs text-body-muted">{song.artist}</p>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <span className="shrink-0 rounded-full bg-white/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] text-ink-soft">{song.platform}</span>
-                                    <button type="button" onClick={() => handleRemovePickedSong(index)} className="hidden shrink-0 rounded-full border border-karaoke/20 bg-karaoke/10 px-2 py-1 text-[10px] font-black text-karaoke transition hover:bg-karaoke/20 group-hover:block">
-                                      {t('removePicked')}
-                                    </button>
-                                  </div>
-                                </div>
-                                );
-                              })}
-                            </div>
-                          </>
-                        ) : (
-                          <p className="py-8 text-center text-xs leading-5 text-body-muted">{t('noPickedSongs')}</p>
-                        )}
-                      </div>
-                    ) : null}
-
-                    {/* ── Imported tab ── */}
-                    {activeTab === 'imported' ? (
-                      <div>
-                        {library && library.songs.length > 0 && importBatches.length > 0 ? (
-                          <div className="space-y-2.5">
-                            {importBatches.map((batch) => {
-                              const session = batchSessions[batch.id];
-                              const progress = session ? getBatchProgress(session) : null;
-                              const hasProgress = progress && progress.swiped > 0;
-                              const isComplete = progress?.complete ?? false;
-                              const pct = progress ? Math.round((progress.swiped / progress.total) * 100) : 0;
-                              const isExpanded = expandedBatches.has(batch.id);
-                              const batchSongs = isExpanded ? getSongsForBatch(library, batch.id) : [];
-                              const filteredBatchSongs = librarySearch
-                                ? batchSongs.filter((s) => s.title.toLowerCase().includes(librarySearch.toLowerCase()) || s.artist.toLowerCase().includes(librarySearch.toLowerCase()))
-                                : batchSongs;
-
-                              return (
-                                <div key={batch.id} className="overflow-hidden rounded-2xl border border-white/10 bg-white/[0.03]">
-                                  <div className="p-3.5">
-                                    <div className="flex items-start justify-between gap-2">
-                                      <button type="button" onClick={() => setExpandedBatches((prev) => {const next = new Set(prev); if (next.has(batch.id)) next.delete(batch.id); else next.add(batch.id); return next;})} className="flex min-w-0 flex-1 items-start gap-2 text-left">
-                                        <motion.svg
-                                          animate={{rotate: isExpanded ? 180 : 0}}
-                                          transition={{duration: 0.2}}
-                                          className="mt-0.5 h-4 w-4 shrink-0 text-body-muted"
-                                          viewBox="0 0 16 16"
-                                          fill="none"
-                                          stroke="currentColor"
-                                          strokeWidth="2"
-                                          strokeLinecap="round"
-                                          strokeLinejoin="round"
-                                        >
-                                          <path d="M4 6l4 4 4-4" />
-                                        </motion.svg>
-                                        <div className="min-w-0">
-                                          <p className="text-sm font-black text-white">{batch.label}</p>
-                                          <p className="mt-0.5 text-[10px] text-body-muted">{batch.songCount} songs</p>
-                                        </div>
-                                      </button>
-                                      <div className="flex shrink-0 items-center gap-1.5">
-                                        {isComplete ? (
-                                          <span className="rounded-full bg-karaoke-cyan/15 px-2.5 py-1 text-[10px] font-black text-karaoke-cyan">{t('batchComplete')}</span>
-                                        ) : null}
-                                        <button type="button" onClick={() => handleDeleteBatch(batch.id)} className="rounded-full p-1 text-body-muted transition hover:bg-white/10 hover:text-white">
-                                          <span className="text-xs">✕</span>
-                                        </button>
-                                      </div>
-                                    </div>
-
-                                    {hasProgress ? (
-                                      <div className="mt-2.5">
-                                        <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
-                                          <div className={`h-full rounded-full transition-all ${isComplete ? 'bg-karaoke-cyan' : 'bg-gradient-to-r from-karaoke to-karaoke-cyan'}`} style={{width: `${pct}%`}} />
-                                        </div>
-                                        <div className="mt-1.5 flex gap-3 text-[10px] text-body-muted">
-                                          <span>{t('batchProgress', {swiped: progress.swiped, total: progress.total})}</span>
-                                          <span className="text-karaoke-cyan">{t('batchLiked', {count: progress.liked})}</span>
-                                          <span>{t('batchSkipped', {count: progress.skipped})}</span>
-                                        </div>
-                                      </div>
-                                    ) : null}
-
-                                    <div className={`${hasProgress ? 'mt-2.5' : 'mt-3'} flex gap-2`}>
-                                      <button type="button" onClick={() => void handlePickBatch(batch.id)} className={`h-9 flex-1 rounded-xl text-xs font-black transition hover:scale-[1.01] ${isComplete ? 'border border-karaoke-cyan/25 bg-karaoke-cyan/10 text-karaoke-cyan' : 'bg-karaoke-cyan text-canvas'}`}>
-                                        {hasProgress ? t('batchResumePicking') : t('batchStartPicking')}
-                                      </button>
-                                      {hasProgress ? (
-                                        <button type="button" onClick={() => handleResetBatch(batch.id)} className="h-9 rounded-xl border border-white/10 bg-white/[0.04] px-3 text-xs font-black text-ink-soft transition hover:bg-white/10">
-                                          {t('batchResetProgress')}
-                                        </button>
-                                      ) : null}
-                                    </div>
-
-                                    {isExpanded && filteredBatchSongs.length > 0 ? (
-                                      <div className="mt-3 max-h-[300px] space-y-1.5 overflow-y-auto border-t border-white/5 pt-3">
-                                        {filteredBatchSongs.map((song, index) => (
-                                          <div key={`b-${batch.id}-${song.title}-${song.artist}-${index}`} className="group flex items-center justify-between rounded-xl border border-white/8 bg-white/[0.035] px-3 py-2.5">
-                                            <div className="min-w-0 flex-1">
-                                              <p className="text-sm font-bold text-white">{song.title}</p>
-                                              <p className="text-xs text-body-muted">{song.artist}</p>
-                                            </div>
-                                            <div className="flex items-center gap-2">
-                                              <span className="shrink-0 rounded-full bg-white/10 px-2 py-0.5 text-[10px] uppercase tracking-[0.18em] text-ink-soft">{song.platform}</span>
-                                              <button type="button" onClick={() => handleRemoveSongFromBatch(song)} className="hidden shrink-0 rounded-full border border-karaoke/20 bg-karaoke/10 px-2 py-1 text-[10px] font-black text-karaoke transition hover:bg-karaoke/20 group-hover:block">
-                                                {t('removeSong')}
-                                              </button>
-                                            </div>
-                                          </div>
-                                        ))}
-                                      </div>
-                                    ) : null}
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        ) : (
-                          <p className="py-8 text-center text-xs leading-5 text-body-muted">{t('libraryEmpty')}</p>
-                        )}
-                      </div>
-                    ) : null}
-                  </>
-                ) : (
-                  <p className="text-xs leading-5 text-body-muted">{t('libraryEmpty')}</p>
-                )}
-              </>
-            ) : null}
-          </div>
+          <LibraryPanel
+            library={library}
+            savedLikedSongs={savedLikedSongs}
+            importBatches={importBatches}
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
+            librarySearch={librarySearch}
+            setLibrarySearch={setLibrarySearch}
+            queueLimit={queueLimit}
+            setQueueLimit={setQueueLimit}
+            generateLandingQueue={generateLandingQueue}
+            pickLandingRandomSong={pickLandingRandomSong}
+            randomSong={randomSong}
+            generatedQueue={generatedQueue}
+            queueText={queueText}
+            queueCardRef={queueCardRef}
+            handleCopyQueueText={handleCopyQueueText}
+            exportMessage={exportMessage}
+            handleSaveQueueImage={handleSaveQueueImage}
+            handleRemovePickedSong={handleRemovePickedSong}
+            batchSessions={batchSessions}
+            expandedBatches={expandedBatches}
+            setExpandedBatches={setExpandedBatches}
+            handleDeleteBatch={handleDeleteBatch}
+            handlePickBatch={handlePickBatch}
+            handleResetBatch={handleResetBatch}
+            handleRemoveSongFromBatch={handleRemoveSongFromBatch}
+            libraryExpanded={libraryExpanded}
+            setLibraryExpanded={setLibraryExpanded}
+          />
         </motion.div>
       </section>
 
     </main>
-  );
-}
-
-function ImportLoadingPanel({loadingSteps, title, body}: {loadingSteps: string[]; title: string; body: string}) {
-  return (
-    <div className="mt-4 overflow-hidden rounded-2xl border border-karaoke/20 bg-karaoke/10 p-4">
-      <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
-        <motion.div
-          className="h-full w-1/2 rounded-full bg-gradient-to-r from-karaoke to-karaoke-cyan"
-          animate={{x: ['-100%', '220%']}}
-          transition={{duration: 1.45, repeat: Infinity, ease: 'easeInOut'}}
-        />
-      </div>
-      <p className="mt-3 text-sm font-black text-white">{title}</p>
-      <p className="mt-1 text-xs leading-5 text-body-muted">{body}</p>
-      <div className="mt-3 grid gap-2">
-        {loadingSteps.map((step, index) => (
-          <div key={step} className="flex items-center gap-2 text-xs text-ink-soft">
-            <span className="h-1.5 w-1.5 rounded-full bg-karaoke-cyan" style={{opacity: 1 - index * 0.2}} />
-            {step}
-          </div>
-        ))}
-      </div>
-    </div>
   );
 }

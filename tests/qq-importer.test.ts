@@ -10,7 +10,8 @@ describe('QQ Music importer', () => {
             playlist: {
               songlist: [
                 {songname: '稻香', singer: [{name: '周杰伦'}]},
-                {title: '修炼爱情', singer: [{name: '林俊杰'}]}
+                {title: '修炼爱情', singer: [{name: '林俊杰'}]},
+                {songname: '无名歌曲', singer: []}
               ]
             }
           };
@@ -20,12 +21,13 @@ describe('QQ Music importer', () => {
 
     expect(parseQQMusicSongs(html)).toEqual([
       {title: '稻香', artist: '周杰伦', platform: 'qq', tags: []},
-      {title: '修炼爱情', artist: '林俊杰', platform: 'qq', tags: []}
+      {title: '修炼爱情', artist: '林俊杰', platform: 'qq', tags: []},
+      {title: '无名歌曲', artist: 'Unknown artist', platform: 'qq', tags: []}
     ]);
   });
 
   it('normalizes pasted song text', () => {
-    expect(normalizeSongs('后来 - 刘若英\n五月天 / 倔强')).toEqual([
+    expect(normalizeSongs('后来 - 刘若英\n五月天 / 倔强\n 后来 - 刘若英 ')).toEqual([
       {title: '后来', artist: '刘若英', platform: 'manual', tags: []},
       {title: '五月天', artist: '倔强', platform: 'manual', tags: []}
     ]);
@@ -53,7 +55,8 @@ describe('QQ Music importer', () => {
         {
           songlist: [
             {songname: '突然好想你', singer: [{name: '五月天'}]},
-            {songname: '小幸运', singer: [{name: '田馥甄'}]}
+            {songname: '小幸运', singer: [{name: '田馥甄'}]},
+            {songname: '突然好想你', singer: [{name: '五月天'}]}
           ]
         }
       ]

@@ -33,4 +33,8 @@ describe('tonight queue tools', () => {
   it('returns null when picking from an empty selected list', () => {
     expect(pickRandomSong([], 'next-song')).toBeNull();
   });
+
+  it('returns an empty singing order from an empty selected list', () => {
+    expect(generateSingingOrder([])).toEqual([]);
+  });
 });

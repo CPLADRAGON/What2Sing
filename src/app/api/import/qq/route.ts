@@ -1,4 +1,5 @@
 import {NextResponse} from 'next/server';
+import {IMPORT_FETCH_TIMEOUT_MS, isHostAllowed} from '@/lib/importers/fetch-guard';
 import {extractQQMusicPlaylistIds, parseQQMusicPayload, parseQQMusicSongs, type ImportedSong} from '@/lib/importers/qq';
 
 const QQ_HOST_PATTERN = /(^|\.)qq\.com$/i;
@@ -23,8 +24,13 @@ export async function POST(request: Request) {
         'user-agent': 'Mozilla/5.0 KTV-Picker/0.1 (+https://vercel.app)',
         accept: 'text/html,application/xhtml+xml'
       },
+      signal: AbortSignal.timeout(IMPORT_FETCH_TIMEOUT_MS),
       next: {revalidate: 300}
     });
+
+    if (!isHostAllowed(new URL(response.url).hostname, QQ_HOST_PATTERN)) {
+      return NextResponse.json({error: 'Import URL redirected to an unsupported host.'}, {status: 400});
+    }
 
     if (!response.ok) {
       return NextResponse.json({error: `QQ Music returned ${response.status}.`}, {status: 502});
@@ -56,6 +62,10 @@ export async function POST(request: Request) {
 
     return NextResponse.json({source: 'qq', count: songs.length, songs});
   } catch (error) {
+    if (error instanceof DOMException && (error.name === 'TimeoutError' || error.name === 'AbortError')) {
+      return NextResponse.json({error: 'The music service took too long to respond. Please try again.'}, {status: 504});
+    }
+
     const message = error instanceof TypeError ? 'Invalid URL.' : 'Unable to import this QQ Music share.';
     return NextResponse.json({error: message}, {status: 400});
   }
@@ -69,6 +79,7 @@ async function fetchPlaylistSongs(playlistIds: string[]): Promise<ImportedSong[]
         accept: 'application/json,text/plain,*/*',
         referer: 'https://y.qq.com/'
       },
+      signal: AbortSignal.timeout(IMPORT_FETCH_TIMEOUT_MS),
       next: {revalidate: 300}
     });
 

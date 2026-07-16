@@ -27,6 +27,10 @@ export async function POST(request: Request) {
     });
 
     if (error) {
+      if (isEmailSendingFailure(error)) {
+        return NextResponse.json({error: EMAIL_SENDING_FAILURE_MESSAGE}, {status: 502});
+      }
+
       const status = error.message.toLowerCase().includes('rate limit') ? 429 : getAuthServerErrorStatus(error);
       return NextResponse.json({error: getSupabaseAuthFailureMessage(error, process.env.NEXT_PUBLIC_SUPABASE_URL)}, {status});
     }
@@ -52,4 +56,34 @@ function createAuthClient() {
       autoRefreshToken: false
     }
   });
+}
+
+const EMAIL_SENDING_FAILURE_MESSAGE =
+  "We couldn't send the login email. The app's email service may be misconfigured — please try again later or contact the site owner.";
+
+function isEmailSendingFailure(error: unknown) {
+  const message = getErrorMessage(error).toLowerCase();
+  const status = getErrorStatus(error);
+
+  return (message.includes('sending') && message.includes('email')) || (status === 500 && message.includes('email'));
+}
+
+function getErrorMessage(error: unknown) {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  if (typeof error === 'object' && error && 'message' in error && typeof error.message === 'string') {
+    return error.message;
+  }
+
+  return typeof error === 'string' ? error : '';
+}
+
+function getErrorStatus(error: unknown) {
+  if (typeof error !== 'object' || !error || !('status' in error)) {
+    return undefined;
+  }
+
+  return typeof error.status === 'number' ? error.status : undefined;
 }

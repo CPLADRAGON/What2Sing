@@ -1,6 +1,6 @@
 'use client';
 
-import {AnimatePresence, animate, motion, useMotionValue, useTransform, type PanInfo} from 'framer-motion';
+import {AnimatePresence, animate, motion, useMotionValue, useReducedMotion, useTransform, type PanInfo} from 'framer-motion';
 import {useLocale, useTranslations} from 'next-intl';
 import Link from 'next/link';
 import {useRouter} from 'next/navigation';
@@ -9,9 +9,12 @@ import {flushSync} from 'react-dom';
 import {createLibrary, deserializeLibrary, LIBRARY_STORAGE_KEY, removePickedSongFromLibrary, serializeLibrary, syncPickedSongsToLibrary, type SongLibrary} from '@/lib/picker/library';
 import type {ImportedSong} from '@/lib/importers/qq';
 import {chooseSyncedLibrary, loadLatestPickerStateForCurrentUser, loadLibraryForCurrentUser, saveLibraryForCurrentUser, savePickerStateForCurrentUser} from '@/lib/picker/persistence';
-import {generateSingingOrder, pickRandomSong} from '@/lib/picker/queue';
+import {songKey} from '@/lib/picker/song-key';
+import {CompletePanel} from './complete-panel';
+import {SelectionPanel} from './selection-panel';
+import {isRawImportDeck, vibrate} from './picker-utils';
+import {safeGetItem, safeSetItem} from '@/lib/safe-storage';
 import {
-  canEnterSelectionMode,
   chooseCurrentSong,
   chooseSyncedPickerState,
   createPickerState,
@@ -34,6 +37,7 @@ export function PickerExperience() {
   const locale = useLocale();
   const router = useRouter();
   const x = useMotionValue(0);
+  const prefersReducedMotion = useReducedMotion();
   const rotate = useTransform(x, [-200, 0, 200], [-24, 0, 24]);
   const scale = useTransform(x, [-200, 0, 200], [1.08, 1, 1.08]);
   const dragLift = useTransform(x, [-200, 0, 200], [-22, 0, -22]);
@@ -57,6 +61,10 @@ export function PickerExperience() {
   const [isShufflingDeck, setIsShufflingDeck] = useState(false);
   const [shuffleAnimationKey, setShuffleAnimationKey] = useState(0);
   const [feedbackMessage, setFeedbackMessage] = useState<{label: string; tone: 'like' | 'skip'; id: number} | null>(null);
+  const shuffleTimerRef = useRef<number | null>(null);
+  const swipeTimerRef = useRef<number | null>(null);
+  const feedbackTimerRef = useRef<number | null>(null);
+  const saveMessageTimerRef = useRef<number | null>(null);
   const flingRef = useRef<ReturnType<typeof animate> | null>(null);
   const lastHapticThreshold = useRef(0);
   const activeBatchId = useRef<string | null>(null);
@@ -81,7 +89,7 @@ export function PickerExperience() {
     }
 
     async function loadSavedProgress() {
-      const raw = window.localStorage.getItem(PICKER_STORAGE_KEY);
+      const raw = safeGetItem(PICKER_STORAGE_KEY);
       const localState = deserializePickerState(raw);
 
       if (isMounted) {
@@ -93,7 +101,7 @@ export function PickerExperience() {
 
       if (!isMounted || !remoteSession) {
         if (isMounted) {
-          const rawLib = window.localStorage.getItem(LIBRARY_STORAGE_KEY);
+          const rawLib = safeGetItem(LIBRARY_STORAGE_KEY);
           const lib = deserializeLibrary(rawLib);
 
           if (lib) {
@@ -105,11 +113,11 @@ export function PickerExperience() {
       }
 
       const syncedState = chooseSyncedPickerState(localState, remoteSession.state) ?? createPickerState([]);
-      window.localStorage.setItem(PICKER_STORAGE_KEY, serializePickerState(syncedState));
+      safeSetItem(PICKER_STORAGE_KEY, serializePickerState(syncedState));
       setState(syncedState);
       setNeedsOrderChoice(false);
 
-      const localLib = deserializeLibrary(window.localStorage.getItem(LIBRARY_STORAGE_KEY));
+      const localLib = deserializeLibrary(safeGetItem(LIBRARY_STORAGE_KEY));
       const remoteLib = await loadLibraryForCurrentUser();
       let lib = chooseSyncedLibrary(localLib, remoteLib);
 
@@ -119,7 +127,7 @@ export function PickerExperience() {
       }
 
       if (lib) {
-        window.localStorage.setItem(LIBRARY_STORAGE_KEY, serializeLibrary(lib));
+        safeSetItem(LIBRARY_STORAGE_KEY, serializeLibrary(lib));
         setLibrary(lib);
       }
     }
@@ -139,7 +147,11 @@ export function PickerExperience() {
       return;
     }
 
-    const interval = window.setInterval(() => {
+    function syncLatestPickerState() {
+      if (typeof document !== 'undefined' && document.hidden) {
+        return;
+      }
+
       if (isDragging || isSwipeLocked || isShufflingDeck) {
         return;
       }
@@ -164,14 +176,39 @@ export function PickerExperience() {
             return current;
           }
 
-          window.localStorage.setItem(PICKER_STORAGE_KEY, serializePickerState(syncedState));
+          safeSetItem(PICKER_STORAGE_KEY, serializePickerState(syncedState));
           return syncedState;
         });
       });
-    }, 15000);
+    }
 
-    return () => window.clearInterval(interval);
+    function handleVisibilityChange() {
+      if (typeof document !== 'undefined' && !document.hidden) {
+        syncLatestPickerState();
+      }
+    }
+
+    const interval = window.setInterval(syncLatestPickerState, 15000);
+
+    if (typeof document !== 'undefined') {
+      document.addEventListener('visibilitychange', handleVisibilityChange);
+    }
+
+    return () => {
+      window.clearInterval(interval);
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', handleVisibilityChange);
+      }
+    };
   }, [isDragging, isShufflingDeck, isSwipeLocked, needsOrderChoice]);
+
+  useEffect(() => () => {
+    [shuffleTimerRef, swipeTimerRef, feedbackTimerRef, saveMessageTimerRef].forEach((timerRef) => {
+      if (timerRef.current !== null) {
+        window.clearTimeout(timerRef.current);
+      }
+    });
+  }, []);
 
   const stopFlingAndReset = useCallback(() => {
     if (flingRef.current) {
@@ -187,7 +224,7 @@ export function PickerExperience() {
       return;
     }
 
-    window.localStorage.setItem(PICKER_STORAGE_KEY, serializePickerState(state));
+    safeSetItem(PICKER_STORAGE_KEY, serializePickerState(state));
     void savePickerStateForCurrentUser(state);
 
     if (activeBatchId.current) {
@@ -195,10 +232,10 @@ export function PickerExperience() {
     }
 
     if (state.liked.length > 0) {
-      const rawLib = window.localStorage.getItem(LIBRARY_STORAGE_KEY);
+      const rawLib = safeGetItem(LIBRARY_STORAGE_KEY);
       const currentLib = deserializeLibrary(rawLib) ?? createLibrary();
       const updatedLib = syncPickedSongsToLibrary(currentLib, state.liked);
-      window.localStorage.setItem(LIBRARY_STORAGE_KEY, serializeLibrary(updatedLib));
+      safeSetItem(LIBRARY_STORAGE_KEY, serializeLibrary(updatedLib));
       void saveLibraryForCurrentUser(updatedLib);
     }
   }, [needsOrderChoice, state]);
@@ -221,18 +258,18 @@ export function PickerExperience() {
       return libPicks;
     }
 
-    const existingKeys = new Set(libPicks.map((s) => `${s.title.trim().toLowerCase()}::${s.artist.trim().toLowerCase()}`));
-    const newPicks = sessionPicks.filter((s) => !existingKeys.has(`${s.title.trim().toLowerCase()}::${s.artist.trim().toLowerCase()}`));
+    const existingKeys = new Set(libPicks.map(songKey));
+    const newPicks = sessionPicks.filter((s) => !existingKeys.has(songKey(s)));
     return [...libPicks, ...newPicks];
   }, [library, safeState.liked]);
 
   const hasPickedSongs = allPickedSongs.length > 0;
 
   function handleRemovePick(indexToRemove: number) {
-    const rawLib = window.localStorage.getItem(LIBRARY_STORAGE_KEY);
+    const rawLib = safeGetItem(LIBRARY_STORAGE_KEY);
     const currentLib = deserializeLibrary(rawLib) ?? createLibrary();
     const updatedLib = removePickedSongFromLibrary(currentLib, indexToRemove);
-    window.localStorage.setItem(LIBRARY_STORAGE_KEY, serializeLibrary(updatedLib));
+    safeSetItem(LIBRARY_STORAGE_KEY, serializeLibrary(updatedLib));
     setLibrary(updatedLib);
     void saveLibraryForCurrentUser(updatedLib);
 
@@ -244,8 +281,8 @@ export function PickerExperience() {
           return current;
         }
 
-        const removedKey = `${removedSong.title.trim().toLowerCase()}::${removedSong.artist.trim().toLowerCase()}`;
-        const filteredLiked = current.liked.filter((s) => `${s.title.trim().toLowerCase()}::${s.artist.trim().toLowerCase()}` !== removedKey);
+        const removedKey = songKey(removedSong);
+        const filteredLiked = current.liked.filter((s) => songKey(s) !== removedKey);
 
         if (filteredLiked.length === current.liked.length) {
           return current;
@@ -260,7 +297,7 @@ export function PickerExperience() {
     const nextState = createPickerState(safeState.deck, {orderMode, seed: `${Date.now()}-${safeState.deck.length}`});
     setState(nextState);
     setNeedsOrderChoice(false);
-    window.localStorage.setItem(PICKER_STORAGE_KEY, serializePickerState(nextState));
+    safeSetItem(PICKER_STORAGE_KEY, serializePickerState(nextState));
     void savePickerStateForCurrentUser(nextState);
   }
 
@@ -273,30 +310,73 @@ export function PickerExperience() {
     setState((current) => (current ? reorderRemainingSongs(current, orderMode, `${Date.now()}-${current.currentIndex}-${current.deck.length}-${shuffleAnimationKey}`) : current));
 
     if (orderMode === 'random') {
-      window.setTimeout(() => setIsShufflingDeck(false), 520);
+      if (shuffleTimerRef.current !== null) {
+        window.clearTimeout(shuffleTimerRef.current);
+      }
+      shuffleTimerRef.current = window.setTimeout(() => {
+        setIsShufflingDeck(false);
+        shuffleTimerRef.current = null;
+      }, 520);
     }
   }
 
-  function decide(decision: PickerDecision) {
+  const decide = useCallback((decision: PickerDecision) => {
     if (isSwipeLocked || !currentSong) {
       return;
     }
 
     const exitDirection = decision === 'like' ? 1 : -1;
+    if (swipeTimerRef.current !== null) {
+      window.clearTimeout(swipeTimerRef.current);
+    }
+    if (feedbackTimerRef.current !== null) {
+      window.clearTimeout(feedbackTimerRef.current);
+    }
     setIsSwipeLocked(true);
     flushSync(() => setSwipeDirection(exitDirection));
     setFeedbackMessage({label: decision === 'like' ? t('pickedFeedback') : t('skippedFeedback'), tone: decision === 'like' ? 'like' : 'skip', id: Date.now()});
     vibrate(decision === 'like' ? [20, 44, 26, 44, 20] : [14, 22, 10]);
     const swipeExitDurationMs = 280;
     flingRef.current = animate(x, exitDirection * 620, {duration: swipeExitDurationMs / 1000, ease: [0.22, 1, 0.36, 1]});
-    window.setTimeout(() => {
+    swipeTimerRef.current = window.setTimeout(() => {
       stopFlingAndReset();
       setState((current) => (current ? chooseCurrentSong(current, decision) : current));
       setIsSwipeLocked(false);
       setSwipeDirection(0);
+      swipeTimerRef.current = null;
     }, swipeExitDurationMs);
-    window.setTimeout(() => setFeedbackMessage(null), 520);
-  }
+    feedbackTimerRef.current = window.setTimeout(() => {
+      setFeedbackMessage(null);
+      feedbackTimerRef.current = null;
+    }, 520);
+  }, [currentSong, isSwipeLocked, stopFlingAndReset, t, x]);
+
+  useEffect(() => {
+    function isTypingTarget(target: EventTarget | null) {
+      if (!(target instanceof HTMLElement)) {
+        return false;
+      }
+
+      return target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName);
+    }
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.ctrlKey || event.metaKey || event.altKey || isTypingTarget(event.target) || viewMode !== 'swipe' || !currentSong || isSwipeLocked) {
+        return;
+      }
+
+      if (event.key === 'ArrowRight') {
+        event.preventDefault();
+        decide('like');
+      } else if (event.key === 'ArrowLeft') {
+        event.preventDefault();
+        decide('skip');
+      }
+    }
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [currentSong, decide, isSwipeLocked, viewMode]);
 
   function handleDrag(_: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) {
     const absX = Math.abs(info.offset.x);
@@ -327,9 +407,16 @@ export function PickerExperience() {
 
   function saveAndExit() {
     if (state) {
-      window.localStorage.setItem(PICKER_STORAGE_KEY, serializePickerState(state));
+      safeSetItem(PICKER_STORAGE_KEY, serializePickerState(state));
+    }
+    if (saveMessageTimerRef.current !== null) {
+      window.clearTimeout(saveMessageTimerRef.current);
     }
     setSaveMessage(t('saved'));
+    saveMessageTimerRef.current = window.setTimeout(() => {
+      setSaveMessage('');
+      saveMessageTimerRef.current = null;
+    }, 2000);
     router.push(`/${locale}`);
   }
 
@@ -380,11 +467,11 @@ export function PickerExperience() {
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(255,61,139,0.22),transparent_34rem),radial-gradient(circle_at_92%_28%,rgba(85,230,255,0.14),transparent_24rem)]" />
       <motion.div
         aria-hidden="true"
-        style={{opacity: stageGlowOpacity, x: stageGlowX}}
+        style={{opacity: prefersReducedMotion ? 0 : stageGlowOpacity, x: stageGlowX}}
         className="pointer-events-none absolute inset-y-20 left-1/2 z-0 h-[34rem] w-[34rem] -translate-x-1/2 rounded-full bg-[radial-gradient(circle,rgba(85,230,255,0.22),rgba(255,61,139,0.16)_38%,transparent_70%)] blur-3xl"
       />
-      <motion.div aria-hidden="true" style={{opacity: bgWashSkip}} className="pointer-events-none absolute inset-0 z-0 bg-[radial-gradient(circle_at_30%_50%,rgba(255,61,139,0.4),transparent_70%)]" />
-      <motion.div aria-hidden="true" style={{opacity: bgWashLike}} className="pointer-events-none absolute inset-0 z-0 bg-[radial-gradient(circle_at_70%_50%,rgba(85,230,255,0.4),transparent_70%)]" />
+      <motion.div aria-hidden="true" style={{opacity: prefersReducedMotion ? 0 : bgWashSkip}} className="pointer-events-none absolute inset-0 z-0 bg-[radial-gradient(circle_at_30%_50%,rgba(255,61,139,0.4),transparent_70%)]" />
+      <motion.div aria-hidden="true" style={{opacity: prefersReducedMotion ? 0 : bgWashLike}} className="pointer-events-none absolute inset-0 z-0 bg-[radial-gradient(circle_at_70%_50%,rgba(85,230,255,0.4),transparent_70%)]" />
       <nav className="relative z-10 mx-auto flex max-w-md items-center justify-between rounded-full border border-hairline-strong bg-white/[0.035] px-4 py-3 backdrop-blur-xl">
         <button type="button" onClick={saveAndExit} className="text-xs font-semibold text-ink-soft">
           {t('saveAndExit')}
@@ -433,9 +520,9 @@ export function PickerExperience() {
                 <motion.span
                   key={shuffleAnimationKey}
                   aria-hidden="true"
-                  initial={{x: '-120%'}}
-                  animate={{x: isShufflingDeck ? '120%' : '-120%'}}
-                  transition={{duration: 0.5, ease: 'easeOut'}}
+                  initial={prefersReducedMotion ? false : {x: '-120%'}}
+                  animate={{x: prefersReducedMotion ? '-120%' : isShufflingDeck ? '120%' : '-120%'}}
+                  transition={prefersReducedMotion ? {duration: 0} : {duration: 0.5, ease: 'easeOut'}}
                   className="absolute inset-y-0 left-0 w-1/2 skew-x-[-18deg] bg-white/30 blur-sm"
                 />
                 <span className="relative z-10">{safeState.orderMode === 'random' ? t('shuffleAgain') : t('shuffleCards')}</span>
@@ -448,10 +535,10 @@ export function PickerExperience() {
               {feedbackMessage ? (
                 <motion.div
                   key={feedbackMessage.id}
-                  initial={{opacity: 0, scale: 0.6}}
+                  initial={prefersReducedMotion ? false : {opacity: 0, scale: 0.6}}
                   animate={{opacity: 1, scale: 1}}
-                  exit={{opacity: 0, scale: 0.8}}
-                  transition={{type: 'spring', stiffness: 500, damping: 28}}
+                  exit={prefersReducedMotion ? {opacity: 0} : {opacity: 0, scale: 0.8}}
+                  transition={prefersReducedMotion ? {duration: 0} : {type: 'spring', stiffness: 500, damping: 28}}
                   className="pointer-events-none absolute inset-0 z-30 flex items-center justify-center"
                 >
                   <span className={`rounded-2xl border-2 px-8 py-4 text-2xl font-black uppercase tracking-[0.22em] backdrop-blur-xl ${
@@ -466,10 +553,10 @@ export function PickerExperience() {
               {isShufflingDeck ? (
                 <motion.div
                   key={`shuffle-flare-${shuffleAnimationKey}`}
-                  initial={{opacity: 0, scale: 0.92, rotate: -3}}
+                  initial={prefersReducedMotion ? false : {opacity: 0, scale: 0.92, rotate: -3}}
                   animate={{opacity: 1, scale: 1, rotate: 0}}
-                  exit={{opacity: 0, scale: 1.04, rotate: 3}}
-                  transition={{duration: 0.32, ease: 'easeOut'}}
+                  exit={prefersReducedMotion ? {opacity: 0} : {opacity: 0, scale: 1.04, rotate: 3}}
+                  transition={prefersReducedMotion ? {duration: 0} : {duration: 0.32, ease: 'easeOut'}}
                   className="pointer-events-none absolute inset-x-8 top-5 z-20 rounded-full border border-karaoke-cyan/30 bg-karaoke-cyan/15 px-4 py-2 text-center text-[10px] font-black uppercase tracking-[0.22em] text-karaoke-cyan shadow-cyan backdrop-blur-xl"
                 >
                   {t('shuffleCards')}
@@ -478,7 +565,7 @@ export function PickerExperience() {
             </AnimatePresence>
             <motion.div
               aria-hidden="true"
-              style={{opacity: directionCueOpacity}}
+              style={{opacity: prefersReducedMotion ? 0 : directionCueOpacity}}
               className="pointer-events-none absolute inset-x-2 top-10 z-0 h-72 rounded-[2.5rem] bg-[linear-gradient(90deg,rgba(255,61,139,0.22),transparent_45%,rgba(85,230,255,0.24))] blur-2xl"
             />
             {nextSongs.map((song, index) => (
@@ -486,14 +573,14 @@ export function PickerExperience() {
                 key={`${song.title}-${song.artist}-stack-${index}`}
                 className="absolute inset-x-4 top-8 rounded-[2rem] border border-hairline-strong bg-surface-card/75 p-6 opacity-60 blur-[0.2px]"
                 animate={{
-                  y: isDealing && index === 0 ? 0 : (index + 1) * deckLift + (isShufflingDeck ? Math.sin(shuffleAnimationKey + index) * 8 : 0),
-                  x: isShufflingDeck ? (index % 2 === 0 ? -12 : 12) : 0,
-                  rotate: isShufflingDeck ? (index % 2 === 0 ? -4 : 4) : 0,
+                  y: isDealing && index === 0 ? 0 : (index + 1) * deckLift + (!prefersReducedMotion && isShufflingDeck ? Math.sin(shuffleAnimationKey + index) * 8 : 0),
+                  x: !prefersReducedMotion && isShufflingDeck ? (index % 2 === 0 ? -12 : 12) : 0,
+                  rotate: !prefersReducedMotion && isShufflingDeck ? (index % 2 === 0 ? -4 : 4) : 0,
                   scale: isDealing && index === 0 ? 1 : 1 - (index + 1) * deckScaleStep,
                   opacity: isDealing && index === 0 ? 0.85 : deckOpacityBase - index * 0.1,
                   filter: isDealing && index === 0 ? 'blur(0px)' : 'blur(0.2px)'
                 }}
-                transition={{type: 'spring', stiffness: isDealing && index === 0 ? 280 : 360, damping: isDealing && index === 0 ? 26 : 34, mass: 0.75}}
+                transition={prefersReducedMotion ? {duration: 0} : {type: 'spring', stiffness: isDealing && index === 0 ? 280 : 360, damping: isDealing && index === 0 ? 26 : 34, mass: 0.75}}
               >
                 <p className="truncate text-xl font-black text-white/60">{song.title}</p>
               </motion.div>
@@ -510,10 +597,11 @@ export function PickerExperience() {
                 onDrag={handleDrag}
                 onDragEnd={handleDragEnd}
                 style={{x, y: dragLift, rotate, scale, boxShadow: cardGlow}}
-                initial={{opacity: 0, y: 36, scale: 0.9, rotate: -2}}
-                animate={{opacity: 1, y: 0, rotate: isShufflingDeck ? [0, -3, 3, 0] : [0, 1.5, -1, 0.5, 0], scale: isShufflingDeck ? [1, 0.98, 1.02, 1] : 1}}
-                exit={{opacity: 0, x: swipeDirection * 620, y: -48, rotate: swipeDirection * 26, scale: 0.86, transition: {duration: 0.24, ease: [0.22, 1, 0.36, 1]}}}
-                transition={{type: 'spring', stiffness: 340, damping: 22, mass: 0.8}}
+                aria-label={t('songCardAria', {title: currentSong.title, artist: currentSong.artist})}
+                initial={prefersReducedMotion ? false : {opacity: 0, y: 36, scale: 0.9, rotate: -2}}
+                animate={{opacity: 1, y: 0, rotate: prefersReducedMotion ? 0 : isShufflingDeck ? [0, -3, 3, 0] : [0, 1.5, -1, 0.5, 0], scale: prefersReducedMotion ? 1 : isShufflingDeck ? [1, 0.98, 1.02, 1] : 1}}
+                exit={{opacity: 0, x: swipeDirection * 620, y: prefersReducedMotion ? 0 : -48, rotate: prefersReducedMotion ? 0 : swipeDirection * 26, scale: prefersReducedMotion ? 1 : 0.86, transition: {duration: prefersReducedMotion ? 0 : 0.24, ease: [0.22, 1, 0.36, 1]}}}
+                transition={prefersReducedMotion ? {duration: 0} : {type: 'spring', stiffness: 340, damping: 22, mass: 0.8}}
                 className="absolute inset-0 flex touch-none cursor-grab flex-col justify-between rounded-[2.25rem] border border-hairline-strong bg-[linear-gradient(145deg,rgba(255,255,255,0.13),rgba(255,255,255,0.035))] p-7 shadow-glow backdrop-blur-xl active:cursor-grabbing"
               >
                 <motion.div style={{opacity: skipOpacity, scale: skipScale}} className="pointer-events-none absolute left-6 top-20 rotate-[-10deg] rounded-2xl border-2 border-karaoke bg-karaoke/10 px-4 py-2 text-lg font-black uppercase tracking-[0.18em] text-karaoke shadow-[0_0_30px_rgba(255,61,139,0.28)]">
@@ -524,9 +612,9 @@ export function PickerExperience() {
                 </motion.div>
 
                 <motion.div
-                  initial={{opacity: 0, y: 12}}
+                  initial={prefersReducedMotion ? false : {opacity: 0, y: 12}}
                   animate={{opacity: 1, y: 0}}
-                  transition={{delay: 0.06, duration: 0.3, ease: 'easeOut'}}
+                  transition={{delay: 0.06, duration: prefersReducedMotion ? 0 : 0.3, ease: 'easeOut'}}
                 >
                   <div className="mb-5 flex items-center justify-between">
                     <span className="rounded-full bg-white/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-ink-soft">
@@ -535,17 +623,17 @@ export function PickerExperience() {
                     <span className="text-xs text-body-muted">#{safeState.currentIndex + 1}</span>
                   </div>
                   <motion.h1
-                    initial={{opacity: 0, x: -8}}
+                    initial={prefersReducedMotion ? false : {opacity: 0, x: -8}}
                     animate={{opacity: 1, x: 0}}
-                    transition={{delay: 0.1, duration: 0.32, ease: 'easeOut'}}
+                    transition={{delay: 0.1, duration: prefersReducedMotion ? 0 : 0.32, ease: 'easeOut'}}
                     className="font-display text-5xl font-black leading-[0.94] tracking-[-0.07em] text-white"
                   >
                     {currentSong.title}
                   </motion.h1>
                   <motion.p
-                    initial={{opacity: 0, x: -6}}
+                    initial={prefersReducedMotion ? false : {opacity: 0, x: -6}}
                     animate={{opacity: 1, x: 0}}
-                    transition={{delay: 0.16, duration: 0.3, ease: 'easeOut'}}
+                    transition={{delay: 0.16, duration: prefersReducedMotion ? 0 : 0.3, ease: 'easeOut'}}
                     className="mt-4 text-lg font-semibold text-karaoke-cyan"
                   >
                     {currentSong.artist}
@@ -553,12 +641,15 @@ export function PickerExperience() {
                 </motion.div>
 
                 <motion.div
-                  initial={{opacity: 0, y: 10}}
+                  initial={prefersReducedMotion ? false : {opacity: 0, y: 10}}
                   animate={{opacity: 1, y: 0}}
-                  transition={{delay: 0.22, duration: 0.28, ease: 'easeOut'}}
+                  transition={{delay: 0.22, duration: prefersReducedMotion ? 0 : 0.28, ease: 'easeOut'}}
                   className="rounded-[1.5rem] border border-white/10 bg-black/25 p-4"
                 >
-                  <p className="text-xs leading-5 text-body-muted">{t('gestureHint')}</p>
+                  <p className="text-xs leading-5 text-body-muted">
+                    {t('gestureHint')}
+                    <span className="mt-1 hidden text-[11px] text-ink-soft sm:block">{t('keyboardHint')}</span>
+                  </p>
                 </motion.div>
               </motion.article>
             ) : complete ? (
@@ -603,146 +694,4 @@ export function PickerExperience() {
       )}
     </main>
   );
-}
-
-function SelectionPanel({pickedSongs, onRemove, onContinue, onFinish}: {pickedSongs: ImportedSong[]; onRemove: (index: number) => void; onContinue: () => void; onFinish: () => void}) {
-  const t = useTranslations('picker');
-  const [queueLimit, setQueueLimit] = useState<number | 'all'>('all');
-  const [singingOrder, setSingingOrder] = useState(pickedSongs);
-  const [randomSong, setRandomSong] = useState<ImportedSong | null>(pickedSongs[0] ?? null);
-
-  function generateQueue() {
-    setSingingOrder(generateSingingOrder(pickedSongs, {limit: queueLimit, seed: `${Date.now()}-${pickedSongs.length}`}));
-    setRandomSong(null);
-  }
-
-  function chooseRandomSong() {
-    setRandomSong(pickRandomSong(pickedSongs, `${Date.now()}-${pickedSongs.length}`));
-  }
-
-  return (
-    <section className="relative z-10 mx-auto flex min-h-[calc(100vh-6rem)] max-w-md flex-col py-8">
-      <div className="rounded-[2rem] border border-hairline-strong bg-surface-card/90 p-6 shadow-cyan backdrop-blur-xl">
-        <p className="text-xs font-bold uppercase tracking-[0.24em] text-karaoke-cyan">{pickedSongs.length} songs</p>
-        <h1 className="mt-3 font-display text-4xl font-black tracking-[-0.06em]">{t('selectionTitle')}</h1>
-        <p className="mt-3 text-sm leading-6 text-body-muted">{t('selectionBody')}</p>
-        <div className="mt-5 rounded-[1.5rem] border border-karaoke-cyan/20 bg-karaoke-cyan/10 p-4">
-          <p className="text-xs font-black uppercase tracking-[0.2em] text-karaoke-cyan">{t('queueTools')}</p>
-          <div className="mt-3 grid grid-cols-3 gap-2">
-            {(['all', 5, 10] as const).map((limit) => (
-              <button
-                key={limit}
-                type="button"
-                onClick={() => setQueueLimit(limit)}
-                className={`h-9 rounded-xl text-xs font-black transition ${queueLimit === limit ? 'bg-white text-canvas' : 'border border-white/10 bg-white/[0.04] text-ink-soft'}`}
-              >
-                {limit === 'all' ? t('queueLimitAll') : limit}
-              </button>
-            ))}
-          </div>
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            <button type="button" onClick={generateQueue} disabled={!pickedSongs.length} className="h-11 rounded-2xl bg-karaoke-cyan text-xs font-black text-canvas disabled:opacity-40">
-              {t('generateQueue')}
-            </button>
-            <button type="button" onClick={chooseRandomSong} disabled={!pickedSongs.length} className="h-11 rounded-2xl border border-white/10 bg-white/[0.04] text-xs font-black text-ink-soft disabled:opacity-40">
-              {t('pickOneRandom')}
-            </button>
-          </div>
-          {randomSong ? (
-            <div className="mt-3 rounded-2xl border border-karaoke/30 bg-karaoke/10 px-4 py-3">
-              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-karaoke">{t('nextSong')}</p>
-              <p className="mt-1 text-sm font-black text-white">{randomSong.title}</p>
-              <p className="text-xs text-body-muted">{randomSong.artist}</p>
-            </div>
-          ) : null}
-        </div>
-        <div className="mt-5 max-h-[52vh] space-y-2 overflow-y-auto pr-1">
-          {singingOrder.map((song, index) => (
-            <div key={`${song.title}-${song.artist}-${index}`} className="flex items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
-              <div>
-                <p className="text-sm font-bold"><span className="mr-2 text-karaoke-cyan">#{index + 1}</span>{song.title}</p>
-                <p className="text-xs text-body-muted">{song.artist}</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  const libraryIndex = pickedSongs.findIndex((picked) => picked.title === song.title && picked.artist === song.artist);
-                  onRemove(libraryIndex);
-                  setSingingOrder((current) => current.filter((queued) => queued.title !== song.title || queued.artist !== song.artist));
-                  setRandomSong((current) => (current?.title === song.title && current.artist === song.artist ? null : current));
-                }}
-                className="rounded-full border border-white/10 px-3 py-1 text-xs text-ink-soft"
-              >
-                {t('remove')}
-              </button>
-            </div>
-          ))}
-        </div>
-        <div className="mt-5 grid grid-cols-2 gap-3">
-          <button type="button" onClick={onContinue} className="h-12 rounded-2xl border border-white/10 bg-white/[0.04] text-sm font-black text-ink-soft">
-            {t('continueSwiping')}
-          </button>
-          <button type="button" onClick={onFinish} className="h-12 rounded-2xl bg-white text-sm font-black text-canvas">
-            {t('finishQueue')}
-          </button>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function CompletePanel({state, pickedSongs, onSelection, onReswipe}: {state: PickerState; pickedSongs: ImportedSong[]; onSelection: () => void; onReswipe: () => void}) {
-  const t = useTranslations('picker');
-  const pickedKeys = new Set(pickedSongs.map((song) => `${song.title.trim().toLowerCase()}::${song.artist.trim().toLowerCase()}`));
-  const unselectedCount = state.deck.filter((song) => !pickedKeys.has(`${song.title.trim().toLowerCase()}::${song.artist.trim().toLowerCase()}`)).length;
-
-  return (
-    <motion.div
-      key="complete"
-      initial={{opacity: 0, scale: 0.96}}
-      animate={{opacity: 1, scale: 1}}
-      className="absolute inset-0 flex flex-col justify-between rounded-[2.25rem] border border-hairline-strong bg-surface-card p-7 shadow-cyan"
-    >
-      <div>
-        <p className="text-xs font-bold uppercase tracking-[0.24em] text-karaoke-cyan">{t('completeEyebrow')}</p>
-        <h1 className="mt-3 font-display text-4xl font-black tracking-[-0.06em]">{t('completeTitle')}</h1>
-        <p className="mt-3 text-sm leading-6 text-body-muted">{t('completeBody', {count: pickedSongs.length})}</p>
-        <p className="mt-2 rounded-2xl border border-karaoke-cyan/20 bg-karaoke-cyan/10 px-3 py-2 text-xs leading-5 text-ink-soft">{t('allSwiped')}</p>
-      </div>
-      <div className="space-y-2 overflow-y-auto">
-        {pickedSongs.map((song, index) => (
-          <div key={`${song.title}-${index}`} className="rounded-2xl border border-white/10 bg-white/[0.04] px-4 py-3">
-            <p className="text-sm font-bold">{song.title}</p>
-            <p className="text-xs text-body-muted">{song.artist}</p>
-          </div>
-        ))}
-      </div>
-      <div className="mt-4 grid grid-cols-2 gap-3">
-        <button type="button" onClick={onSelection} className="h-12 rounded-2xl bg-white text-sm font-black text-canvas">
-          {t('viewPicks')}
-        </button>
-        <button type="button" onClick={onReswipe} disabled={unselectedCount === 0} className="h-12 rounded-2xl border border-karaoke-cyan/25 bg-karaoke-cyan/10 text-sm font-black text-karaoke-cyan disabled:opacity-40">
-          {t('reswipeUnselected')}
-        </button>
-      </div>
-    </motion.div>
-  );
-}
-
-function isRawImportDeck(value: string | null): boolean {
-  if (!value) {
-    return false;
-  }
-
-  try {
-    return Array.isArray(JSON.parse(value) as unknown);
-  } catch {
-    return false;
-  }
-}
-
-function vibrate(pattern: VibratePattern = 10) {
-  if ('vibrate' in navigator) {
-    navigator.vibrate(pattern);
-  }
 }

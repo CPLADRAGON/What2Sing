@@ -1,4 +1,5 @@
 import * as cheerio from 'cheerio';
+import {finalizeSongs} from './normalize-imported';
 export {normalizeSongs} from './manual';
 
 export type ImportedSong = {
@@ -175,7 +176,6 @@ function parseJsonish(value: string): unknown | null {
 
 function collectSongCandidates(payload: unknown): ImportedSong[] {
   const songs: ImportedSong[] = [];
-  const seen = new Set<string>();
 
   const visit = (node: unknown) => {
     if (Array.isArray(node)) {
@@ -183,12 +183,8 @@ function collectSongCandidates(payload: unknown): ImportedSong[] {
         const song = readSong(item);
 
         if (song) {
-          const key = `${song.title}::${song.artist}`;
-
-          if (!seen.has(key)) {
-            seen.add(key);
-            songs.push(song);
-          }
+          songs.push(song);
+          continue;
         }
 
         visit(item);
@@ -205,7 +201,7 @@ function collectSongCandidates(payload: unknown): ImportedSong[] {
 
   visit(payload);
 
-  return songs;
+  return finalizeSongs(songs);
 }
 
 function readSong(item: unknown): ImportedSong | null {
@@ -216,11 +212,11 @@ function readSong(item: unknown): ImportedSong | null {
   const title = readText(item.title) ?? readText(item.songname) ?? readText(item.songName) ?? readText(item.name);
   const artist = readSinger(item.singer) ?? readSinger(item.singers) ?? readText(item.singername) ?? readText(item.singerName);
 
-  if (!title || !artist) {
+  if (!title) {
     return null;
   }
 
-  return {title, artist, platform: 'qq', tags: []};
+  return {title, artist: artist ?? '', platform: 'qq', tags: []};
 }
 
 function readSinger(value: unknown): string | null {

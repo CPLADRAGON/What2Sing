@@ -1,9 +1,17 @@
-import {readFileSync} from 'node:fs';
+import {readdirSync, readFileSync} from 'node:fs';
+import {join} from 'node:path';
 import {describe, expect, it} from 'vitest';
+
+function readDir(dir: string): string {
+  return readdirSync(dir)
+    .filter((f) => f.endsWith('.ts') || f.endsWith('.tsx'))
+    .map((f) => readFileSync(join(dir, f), 'utf8'))
+    .join('\n');
+}
 
 describe('landing mobile navigation', () => {
   it('keeps the login link visible on phone-sized screens', () => {
-    const source = readFileSync('src/components/landing/landing-experience.tsx', 'utf8');
+    const source = readDir('src\\components\\landing');
     const loginLinkLine = source.split('\n').find((line) => line.includes('/login') && line.includes('className='));
 
     expect(loginLinkLine).toBeDefined();
@@ -12,14 +20,14 @@ describe('landing mobile navigation', () => {
   });
 
   it('shows signed-in user identity beside the login action', () => {
-    const source = readFileSync('src/components/landing/landing-experience.tsx', 'utf8');
+    const source = readDir('src\\components\\landing');
 
     expect(source).toContain('displayName');
     expect(source).toContain('getUserDisplayName');
   });
 
   it('makes the library panel interactive', () => {
-    const source = readFileSync('src/components/landing/landing-experience.tsx', 'utf8');
+    const source = readDir('src\\components\\landing');
 
     expect(source).toContain('generateSingingOrder');
     expect(source).toContain('pickRandomSong');
@@ -27,14 +35,14 @@ describe('landing mobile navigation', () => {
   });
 
   it('shows logout instead of login for signed-in users', () => {
-    const source = readFileSync('src/components/landing/landing-experience.tsx', 'utf8');
+    const source = readDir('src\\components\\landing');
 
     expect(source).toContain('signOut');
     expect(source).toContain("displayName ? (");
   });
 
   it('offers inline source tabs for QQ, Spotify, NetEase, and manual paste', () => {
-    const source = readFileSync('src/components/landing/landing-experience.tsx', 'utf8');
+    const source = readDir('src\\components\\landing');
 
     expect(source).toContain('setActiveSource');
     expect(source).toContain("activeSource === 'spotify'");
@@ -43,7 +51,7 @@ describe('landing mobile navigation', () => {
   });
 
   it('saves per-batch picker sessions and syncs to library', () => {
-    const source = readFileSync('src/components/landing/landing-experience.tsx', 'utf8');
+    const source = readDir('src\\components\\landing');
 
     expect(source).toContain('saveBatchSession');
     expect(source).toContain('addSongsToLibrary');
@@ -52,7 +60,7 @@ describe('landing mobile navigation', () => {
   });
 
   it('uses immediate card transitions instead of waiting for exit animations', () => {
-    const source = readFileSync('src/components/picker/picker-experience.tsx', 'utf8');
+    const source = readDir('src\\components\\picker');
 
     expect(source).not.toContain('mode="wait"');
     expect(source).toContain('isSwipeLocked');

@@ -1,4 +1,4 @@
-import {describe, expect, it} from 'vitest';
+import {describe, expect, it, vi} from 'vitest';
 import {
   appendSongsToSession,
   canEnterSelectionMode,
@@ -78,12 +78,41 @@ describe('picker session', () => {
     expect(state.orderMode).toBe('random');
   });
 
+  it('keeps explicit random seeds deterministic while default seeds can change', () => {
+    const longerDeck: ImportedSong[] = [
+      ...songs,
+      {title: '晴天', artist: '周杰伦', platform: 'qq', tags: []},
+      {title: '勇气', artist: '梁静茹', platform: 'manual', tags: []},
+      {title: '江南', artist: '林俊杰', platform: 'qq', tags: []}
+    ];
+    const now = vi.spyOn(Date, 'now').mockReturnValueOnce(1000).mockReturnValueOnce(1001);
+
+    try {
+      const firstDefault = createPickerState(longerDeck, {orderMode: 'random'});
+      const secondDefault = createPickerState(longerDeck, {orderMode: 'random'});
+      const firstExplicit = createPickerState(longerDeck, {orderMode: 'random', seed: 'ktv-night'});
+      const secondExplicit = createPickerState(longerDeck, {orderMode: 'random', seed: 'ktv-night'});
+
+      expect(firstDefault.deck).not.toEqual(secondDefault.deck);
+      expect(firstExplicit.deck).toEqual(secondExplicit.deck);
+    } finally {
+      now.mockRestore();
+    }
+  });
+
   it('round trips full picker progress through storage serialization', () => {
     const state = chooseCurrentSong(chooseCurrentSong(createPickerState(songs, {orderMode: 'random', seed: 'ktv-night'}), 'like'), 'skip');
 
     expect(deserializePickerState(serializePickerState(state))).toEqual(state);
     expect(deserializePickerState('{broken')).toBeNull();
     expect(deserializePickerState('[{"title":"bad"}]')).toBeNull();
+  });
+
+  it('clamps deserialized current index into the deck bounds', () => {
+    const base = createPickerState(songs);
+
+    expect(deserializePickerState(JSON.stringify({...base, currentIndex: songs.length + 3}))?.currentIndex).toBe(songs.length);
+    expect(deserializePickerState(JSON.stringify({...base, currentIndex: -2}))?.currentIndex).toBe(0);
   });
 
   it('allows selection mode only after at least one song is liked and can remove picked songs', () => {
@@ -103,6 +132,14 @@ describe('picker session', () => {
 
     expect(chooseSyncedPickerState(local, remote)).toEqual(remote);
     expect(chooseSyncedPickerState(remote, local)).toEqual(remote);
+  });
+
+  it('clamps synced picker progress into the chosen deck bounds', () => {
+    const local = {...createPickerState(songs), currentIndex: 99, updatedAt: '2026-05-07T08:00:00.000Z'};
+    const remote = {...createPickerState(songs), currentIndex: -1, updatedAt: '2026-05-07T08:02:00.000Z'};
+
+    expect(chooseSyncedPickerState(local, null)?.currentIndex).toBe(songs.length);
+    expect(chooseSyncedPickerState(local, remote)?.currentIndex).toBe(0);
   });
 
   it('finishes the queue so picked songs become the final KTV list', () => {

@@ -1,5 +1,6 @@
 import type {Metadata, Viewport} from 'next';
 import {Manrope, Noto_Sans_SC} from 'next/font/google';
+import {ServiceWorkerRegister} from '@/components/pwa/service-worker-register';
 import './globals.css';
 
 const manrope = Manrope({subsets: ['latin'], variable: '--font-display'});
@@ -28,15 +29,16 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
   themeColor: '#050507'
 };
 
 export default function RootLayout({children}: {children: React.ReactNode}) {
   return (
     <html lang="en" className={`${manrope.variable} ${notoSansSc.variable} dark`}>
-      <body>{children}</body>
+      <body>
+        {children}
+        <ServiceWorkerRegister />
+      </body>
     </html>
   );
 }

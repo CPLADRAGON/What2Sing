@@ -1,5 +1,6 @@
 import * as cheerio from 'cheerio';
 import type {ImportedSong} from './qq';
+import {finalizeSongs} from './normalize-imported';
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -16,7 +17,6 @@ export function extractSpotifyPlaylistId(url: string): string | null {
 export function parseSpotifyPageSongs(html: string): ImportedSong[] {
   const $ = cheerio.load(html);
   const songs: ImportedSong[] = [];
-  const seen = new Set<string>();
 
   $('script[type="application/ld+json"]').each((_, script) => {
     const text = $(script).text().trim();
@@ -26,19 +26,19 @@ export function parseSpotifyPageSongs(html: string): ImportedSong[] {
     }
 
     try {
-      collectSpotifySongs(JSON.parse(text) as unknown, songs, seen);
+      collectSpotifySongs(JSON.parse(text) as unknown, songs);
     } catch {
       // Ignore malformed metadata blocks; Spotify public pages vary by region/session.
     }
   });
 
-  return songs;
+  return finalizeSongs(songs);
 }
 
-function collectSpotifySongs(node: unknown, songs: ImportedSong[], seen: Set<string>) {
+function collectSpotifySongs(node: unknown, songs: ImportedSong[]) {
   if (Array.isArray(node)) {
     for (const item of node) {
-      collectSpotifySongs(item, songs, seen);
+      collectSpotifySongs(item, songs);
     }
     return;
   }
@@ -54,21 +54,17 @@ function collectSpotifySongs(node: unknown, songs: ImportedSong[], seen: Set<str
       const song = readSpotifySong(track);
 
       if (song) {
-        const key = `${song.title}::${song.artist}`;
-
-        if (!seen.has(key)) {
-          seen.add(key);
-          songs.push(song);
-        }
+        songs.push(song);
+        continue;
       }
 
-      collectSpotifySongs(track, songs, seen);
+      collectSpotifySongs(track, songs);
     }
   }
 
   for (const value of Object.values(node)) {
     if (value !== trackNode) {
-      collectSpotifySongs(value, songs, seen);
+      collectSpotifySongs(value, songs);
     }
   }
 }
@@ -83,11 +79,11 @@ function readSpotifySong(value: unknown): ImportedSong | null {
   const title = readText(item.name);
   const artist = readArtist(item.byArtist ?? item.artist ?? item.artists);
 
-  if (!title || !artist) {
+  if (!title) {
     return null;
   }
 
-  return {title, artist, platform: 'spotify', tags: []};
+  return {title, artist: artist ?? '', platform: 'spotify', tags: []};
 }
 
 function readArtist(value: unknown): string | null {

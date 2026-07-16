@@ -1,5 +1,6 @@
 import * as cheerio from 'cheerio';
 import type {ImportedSong} from './qq';
+import {finalizeSongs} from './normalize-imported';
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -23,7 +24,7 @@ export function parseNeteasePlaylistSongs(html: string): ImportedSong[] {
     const songs = parseTextareaPayload(textarea);
 
     if (songs.length > 0) {
-      return songs;
+      return finalizeSongs(songs);
     }
   }
 
@@ -31,14 +32,14 @@ export function parseNeteasePlaylistSongs(html: string): ImportedSong[] {
   const scriptSongs = parseScriptPayloads($);
 
   if (scriptSongs.length > 0) {
-    return scriptSongs;
+    return finalizeSongs(scriptSongs);
   }
 
   // Strategy 3: Hidden list fallback (titles only, no artists)
   const hiddenSongs = parseHiddenList($);
 
   if (hiddenSongs.length > 0) {
-    return hiddenSongs;
+    return finalizeSongs(hiddenSongs);
   }
 
   return [];
@@ -56,16 +57,16 @@ export function parseNeteaseApiResponse(payload: unknown): ImportedSong[] {
   const result = isRecord(payload.result) ? payload.result : isRecord(payload.playlist) ? payload.playlist : null;
 
   if (!result) {
-    return collectSongNodes(payload);
+    return finalizeSongs(collectSongNodes(payload));
   }
 
   const tracks = Array.isArray(result.tracks) ? result.tracks : Array.isArray(result.trackIds) ? result.trackIds : null;
 
   if (!tracks) {
-    return collectSongNodes(payload);
+    return finalizeSongs(collectSongNodes(payload));
   }
 
-  return dedup(tracks.flatMap(readTrack));
+  return finalizeSongs(tracks.flatMap(readTrack));
 }
 
 /**
@@ -95,7 +96,7 @@ function parseTextareaPayload(text: string): ImportedSong[] {
       return [];
     }
 
-    return dedup(parsed.flatMap(readTrack));
+    return parsed.flatMap(readTrack);
   } catch {
     return [];
   }
@@ -103,7 +104,6 @@ function parseTextareaPayload(text: string): ImportedSong[] {
 
 function parseScriptPayloads($: cheerio.CheerioAPI): ImportedSong[] {
   const songs: ImportedSong[] = [];
-  const seen = new Set<string>();
 
   $('script').each((_, script) => {
     const text = $(script).text();
@@ -121,12 +121,7 @@ function parseScriptPayloads($: cheerio.CheerioAPI): ImportedSong[] {
         const found = collectSongNodes(payload);
 
         for (const song of found) {
-          const key = `${song.title}::${song.artist}`;
-
-          if (!seen.has(key)) {
-            seen.add(key);
-            songs.push(song);
-          }
+          songs.push(song);
         }
       } catch {
         // Ignore malformed JSON
@@ -144,7 +139,7 @@ function parseHiddenList($: cheerio.CheerioAPI): ImportedSong[] {
     const title = $(el).text().trim();
 
     if (title) {
-      songs.push({title, artist: 'Unknown', platform: 'netease', tags: []});
+      songs.push({title, artist: '', platform: 'netease', tags: []});
     }
   });
 
@@ -153,7 +148,6 @@ function parseHiddenList($: cheerio.CheerioAPI): ImportedSong[] {
 
 function collectSongNodes(payload: unknown): ImportedSong[] {
   const songs: ImportedSong[] = [];
-  const seen = new Set<string>();
 
   function visit(node: unknown): void {
     if (Array.isArray(node)) {
@@ -162,12 +156,7 @@ function collectSongNodes(payload: unknown): ImportedSong[] {
 
         if (found.length > 0) {
           for (const song of found) {
-            const key = `${song.title}::${song.artist}`;
-
-            if (!seen.has(key)) {
-              seen.add(key);
-              songs.push(song);
-            }
+            songs.push(song);
           }
 
           // Skip children — artist sub-objects also have "name" fields
@@ -239,7 +228,7 @@ function extractArtist(node: UnknownRecord): string {
     }
   }
 
-  return 'Unknown';
+  return '';
 }
 
 function stringValue(value: unknown): string | null {
@@ -248,19 +237,4 @@ function stringValue(value: unknown): string | null {
 
 function isRecord(value: unknown): value is UnknownRecord {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-function dedup(songs: ImportedSong[]): ImportedSong[] {
-  const seen = new Set<string>();
-
-  return songs.filter((song) => {
-    const key = `${song.title}::${song.artist}`;
-
-    if (seen.has(key)) {
-      return false;
-    }
-
-    seen.add(key);
-    return true;
-  });
 }

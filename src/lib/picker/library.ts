@@ -1,4 +1,5 @@
 import type {ImportedSong} from '@/lib/importers/qq';
+import {songKey} from '@/lib/picker/song-key';
 
 export type ImportBatch = {
   id: string;
@@ -33,9 +34,9 @@ export function createLibrary(): SongLibrary {
 }
 
 export function addSongsToLibrary(library: SongLibrary, songs: ImportedSong[], batchLabel: string): AddSongsResult {
-  const existingKeys = new Set(library.songs.map(getSongKey));
+  const existingKeys = new Set(library.songs.map(songKey));
   const newSongs = songs.filter((song) => {
-    const key = getSongKey(song);
+    const key = songKey(song);
 
     if (existingKeys.has(key)) {
       return false;
@@ -68,9 +69,9 @@ export function addSongsToLibrary(library: SongLibrary, songs: ImportedSong[], b
 }
 
 export function syncPickedSongsToLibrary(library: SongLibrary, sessionPicks: ImportedSong[]): SongLibrary {
-  const existingKeys = new Set(library.pickedSongs.map(getSongKey));
+  const existingKeys = new Set(library.pickedSongs.map(songKey));
   const uniqueNewPicks = sessionPicks.filter((song) => {
-    const key = getSongKey(song);
+    const key = songKey(song);
 
     if (existingKeys.has(key)) {
       return false;
@@ -92,14 +93,14 @@ export function syncPickedSongsToLibrary(library: SongLibrary, sessionPicks: Imp
 }
 
 export function quickAddPickedSong(library: SongLibrary, song: ImportedSong): {library: SongLibrary; added: boolean} {
-  const key = getSongKey(song);
-  const alreadyPicked = library.pickedSongs.some((s) => getSongKey(s) === key);
+  const key = songKey(song);
+  const alreadyPicked = library.pickedSongs.some((s) => songKey(s) === key);
 
   if (alreadyPicked) {
     return {library, added: false};
   }
 
-  const alreadyInSongs = library.songs.some((s) => getSongKey(s) === key);
+  const alreadyInSongs = library.songs.some((s) => songKey(s) === key);
 
   return {
     library: {
@@ -121,8 +122,8 @@ export function removePickedSongFromLibrary(library: SongLibrary, indexToRemove:
 }
 
 export function removeSongFromLibrary(library: SongLibrary, song: ImportedSong): SongLibrary {
-  const key = getSongKey(song);
-  const songIndex = library.songs.findIndex((s) => getSongKey(s) === key);
+  const key = songKey(song);
+  const songIndex = library.songs.findIndex((s) => songKey(s) === key);
 
   if (songIndex === -1) {
     return library;
@@ -151,7 +152,7 @@ export function removeSongFromLibrary(library: SongLibrary, song: ImportedSong):
     ...library,
     songs: library.songs.filter((_, i) => i !== songIndex),
     batches: updatedBatches,
-    pickedSongs: library.pickedSongs.filter((s) => getSongKey(s) !== key),
+    pickedSongs: library.pickedSongs.filter((s) => songKey(s) !== key),
     updatedAt: new Date().toISOString()
   };
 }
@@ -165,13 +166,13 @@ export function removeBatchFromLibrary(library: SongLibrary, batchId: string): S
 
   const batch = library.batches[batchIndex];
   const startIndex = library.batches.slice(0, batchIndex).reduce((sum, b) => sum + b.songCount, 0);
-  const removedSongs = new Set(library.songs.slice(startIndex, startIndex + batch.songCount).map(getSongKey));
+  const removedSongs = new Set(library.songs.slice(startIndex, startIndex + batch.songCount).map(songKey));
 
   return {
     ...library,
     songs: library.songs.filter((_, i) => i < startIndex || i >= startIndex + batch.songCount),
     batches: library.batches.filter((b) => b.id !== batchId),
-    pickedSongs: library.pickedSongs.filter((s) => !removedSongs.has(getSongKey(s))),
+    pickedSongs: library.pickedSongs.filter((s) => !removedSongs.has(songKey(s))),
     updatedAt: new Date().toISOString()
   };
 }
@@ -228,8 +229,4 @@ export function migrateFromLegacyPickerState(defaultDeck: ImportedSong[], import
     pickedSongs,
     updatedAt: new Date().toISOString()
   };
-}
-
-function getSongKey(song: ImportedSong) {
-  return `${song.title.trim().toLowerCase()}::${song.artist.trim().toLowerCase()}`;
 }

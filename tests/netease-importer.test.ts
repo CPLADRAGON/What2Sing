@@ -28,8 +28,8 @@ describe('NetEase Cloud Music importer', () => {
     `;
 
     expect(parseNeteasePlaylistSongs(html)).toEqual([
-      {title: '突然好想你', artist: 'Unknown', platform: 'netease', tags: []},
-      {title: '小幸运', artist: 'Unknown', platform: 'netease', tags: []}
+      {title: '突然好想你', artist: 'Unknown artist', platform: 'netease', tags: []},
+      {title: '小幸运', artist: 'Unknown artist', platform: 'netease', tags: []}
     ]);
   });
 
@@ -101,6 +101,18 @@ describe('NetEase Cloud Music importer', () => {
     };
 
     expect(parseNeteaseApiResponse(payload)).toEqual([{title: '稻香', artist: '周杰伦', platform: 'netease', tags: []}]);
+  });
+
+  it('keeps API songs with missing artists as Unknown artist', () => {
+    const payload = {
+      result: {
+        tracks: [
+          {name: '无名歌曲', artists: []}
+        ]
+      }
+    };
+
+    expect(parseNeteaseApiResponse(payload)).toEqual([{title: '无名歌曲', artist: 'Unknown artist', platform: 'netease', tags: []}]);
   });
 
   it('returns empty for invalid payload', () => {

@@ -62,6 +62,10 @@ In Supabase Auth settings, set the Site URL to your production domain and add th
 - `http://localhost:3000/en/login`
 - `http://localhost:3000/zh/login`
 
+### Email / SMTP setup
+
+Magic-link and OTP login emails require email delivery in Supabase under **Authentication → Emails**. Supabase's built-in email service is rate-limited and intended for development; configure SMTP for production. If login requests fail with `Error sending confirmation email`, SMTP is likely not configured correctly.
+
 ### iPhone Home Screen login code
 
 iOS opens email magic links in Safari, while a Home Screen web app keeps a separate Supabase session. To log in inside the installed Home Screen app, the auth email must show Supabase's one-time token so the user can copy it back into KTV-Picker.

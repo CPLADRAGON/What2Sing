@@ -1,4 +1,5 @@
 import type {ImportedSong} from './qq';
+import {finalizeSongs} from './normalize-imported';
 
 export function normalizeSongs(input: string): ImportedSong[] {
   const songs: ImportedSong[] = [];
@@ -19,5 +20,5 @@ export function normalizeSongs(input: string): ImportedSong[] {
       songs.push({title, artist, platform: 'manual', tags: []});
     });
 
-  return songs;
+  return finalizeSongs(songs);
 }

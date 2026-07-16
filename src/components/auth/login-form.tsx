@@ -6,6 +6,7 @@ import {useEffect, useState} from 'react';
 import {completeAuthRedirectFromUrl} from '@/lib/auth/callback';
 import {getMagicLinkCooldownSeconds, MAGIC_LINK_COOLDOWN_SECONDS} from '@/lib/auth/cooldown';
 import {requestEmailOtp, verifyEmailOtpCode} from '@/lib/auth/otp';
+import {safeGetItem, safeSetItem} from '@/lib/safe-storage';
 import {supabase} from '@/lib/supabase';
 
 const MAGIC_LINK_LAST_REQUESTED_KEY = 'ktv-picker:magic-link-requested-at';
@@ -69,7 +70,7 @@ export function LoginForm() {
 
   useEffect(() => {
     function refreshCooldown() {
-      const lastRequestedAt = Number(window.localStorage.getItem(MAGIC_LINK_LAST_REQUESTED_KEY));
+      const lastRequestedAt = Number(safeGetItem(MAGIC_LINK_LAST_REQUESTED_KEY));
       setCooldownSeconds(getMagicLinkCooldownSeconds(Number.isFinite(lastRequestedAt) ? lastRequestedAt : null));
     }
 
@@ -103,7 +104,7 @@ export function LoginForm() {
       const isRateLimited = message.toLowerCase().includes('rate limit') || message.includes('429');
 
       if (isRateLimited) {
-        window.localStorage.setItem(MAGIC_LINK_LAST_REQUESTED_KEY, String(Date.now()));
+        safeSetItem(MAGIC_LINK_LAST_REQUESTED_KEY, String(Date.now()));
         setCooldownSeconds(MAGIC_LINK_COOLDOWN_SECONDS);
         setMessage(t('retryIn', {seconds: MAGIC_LINK_COOLDOWN_SECONDS}));
         return;
@@ -113,7 +114,7 @@ export function LoginForm() {
       return;
     }
 
-    window.localStorage.setItem(MAGIC_LINK_LAST_REQUESTED_KEY, String(Date.now()));
+    safeSetItem(MAGIC_LINK_LAST_REQUESTED_KEY, String(Date.now()));
     setCooldownSeconds(MAGIC_LINK_COOLDOWN_SECONDS);
     setStatus('sent');
     setMessage(t('sent'));

@@ -1,4 +1,6 @@
 import type {ImportedSong} from '@/lib/importers/qq';
+import {songKey} from '@/lib/picker/song-key';
+import {safeGetItem, safeSetItem} from '@/lib/safe-storage';
 
 export type PickerDecision = 'like' | 'skip';
 export type PickerOrderMode = 'ordered' | 'random';
@@ -30,7 +32,7 @@ export const BATCH_SESSIONS_KEY = 'ktv-picker:batch-sessions';
 
 export function createPickerState(songs: ImportedSong[], options: CreatePickerStateOptions = {}): PickerState {
   const orderMode = options.orderMode ?? 'ordered';
-  const deck = orderMode === 'random' ? shuffleSongs(songs, options.seed ?? 'ktv-picker') : songs;
+  const deck = orderMode === 'random' ? shuffleSongs(songs, options.seed ?? `${Date.now()}-${songs.length}`) : songs;
 
   return {
     deck,
@@ -134,9 +136,9 @@ export function finishPickerQueue(state: PickerState): PickerState {
 }
 
 export function appendSongsToSession(state: PickerState, songs: ImportedSong[]): PickerState {
-  const existingKeys = new Set(state.deck.map(getSongKey));
+  const existingKeys = new Set(state.deck.map(songKey));
   const newSongs = songs.filter((song) => {
-    const key = getSongKey(song);
+    const key = songKey(song);
 
     if (existingKeys.has(key)) {
       return false;
@@ -173,8 +175,8 @@ export function reorderRemainingSongs(state: PickerState, orderMode: PickerOrder
 }
 
 export function restartWithUnselectedSongs(state: PickerState, allPickedSongs: ImportedSong[], options: RestartWithUnselectedSongsOptions = {}): PickerState {
-  const pickedKeys = new Set(allPickedSongs.map(getSongKey));
-  const unselectedDeck = state.defaultDeck.filter((song) => !pickedKeys.has(getSongKey(song)));
+  const pickedKeys = new Set(allPickedSongs.map(songKey));
+  const unselectedDeck = state.defaultDeck.filter((song) => !pickedKeys.has(songKey(song)));
   const orderMode = options.orderMode ?? 'random';
   const deck = orderMode === 'random' ? shuffleSongs(unselectedDeck, options.seed ?? `${Date.now()}-${unselectedDeck.length}`) : unselectedDeck;
 
@@ -191,14 +193,14 @@ export function restartWithUnselectedSongs(state: PickerState, allPickedSongs: I
 
 export function chooseSyncedPickerState(localState: PickerState | null, remoteState: PickerState | null): PickerState | null {
   if (!localState) {
-    return remoteState;
+    return remoteState ? normalizePickerState(remoteState) : null;
   }
 
   if (!remoteState) {
-    return localState;
+    return normalizePickerState(localState);
   }
 
-  return Date.parse(remoteState.updatedAt) > Date.parse(localState.updatedAt) ? remoteState : localState;
+  return normalizePickerState(Date.parse(remoteState.updatedAt) > Date.parse(localState.updatedAt) ? remoteState : localState);
 }
 
 export function deserializeImportedSongs(value: string | null): ImportedSong[] {
@@ -221,7 +223,7 @@ export function deserializeImportedSongs(value: string | null): ImportedSong[] {
 
 export function loadBatchSessions(): BatchSessionMap {
   try {
-    const raw = window.localStorage.getItem(BATCH_SESSIONS_KEY);
+    const raw = safeGetItem(BATCH_SESSIONS_KEY);
 
     if (!raw) {
       return {};
@@ -247,13 +249,13 @@ export function loadBatchSessions(): BatchSessionMap {
 export function saveBatchSession(batchId: string, state: PickerState): void {
   const map = loadBatchSessions();
   map[batchId] = state;
-  window.localStorage.setItem(BATCH_SESSIONS_KEY, JSON.stringify(map));
+  safeSetItem(BATCH_SESSIONS_KEY, JSON.stringify(map));
 }
 
 export function removeBatchSession(batchId: string): void {
   const map = loadBatchSessions();
   delete map[batchId];
-  window.localStorage.setItem(BATCH_SESSIONS_KEY, JSON.stringify(map));
+  safeSetItem(BATCH_SESSIONS_KEY, JSON.stringify(map));
 }
 
 export function getBatchProgress(state: PickerState): {total: number; swiped: number; liked: number; skipped: number; complete: boolean} {
@@ -287,7 +289,7 @@ function normalizePickerState(state: PickerState): PickerState {
   return {
     deck: state.deck,
     defaultDeck: state.defaultDeck ?? state.deck,
-    currentIndex: state.currentIndex,
+    currentIndex: clampCurrentIndex(state.currentIndex, state.deck.length),
     liked: state.liked,
     skipped: state.skipped,
     orderMode: state.orderMode,
@@ -296,11 +298,11 @@ function normalizePickerState(state: PickerState): PickerState {
 }
 
 function orderSongsByDefaultDeck(songs: ImportedSong[], defaultDeck: ImportedSong[]): ImportedSong[] {
-  const remainingByKey = new Map(songs.map((song) => [getSongKey(song), song]));
+  const remainingByKey = new Map(songs.map((song) => [songKey(song), song]));
   const orderedSongs: ImportedSong[] = [];
 
   defaultDeck.forEach((song) => {
-    const key = getSongKey(song);
+    const key = songKey(song);
     const remainingSong = remainingByKey.get(key);
 
     if (!remainingSong) {
@@ -314,8 +316,8 @@ function orderSongsByDefaultDeck(songs: ImportedSong[], defaultDeck: ImportedSon
   return [...orderedSongs, ...Array.from(remainingByKey.values())];
 }
 
-function getSongKey(song: ImportedSong) {
-  return `${song.title.trim().toLowerCase()}::${song.artist.trim().toLowerCase()}`;
+function clampCurrentIndex(currentIndex: number, deckLength: number): number {
+  return Math.max(0, Math.min(currentIndex, deckLength));
 }
 
 function isPickerState(value: unknown): value is PickerState {
@@ -331,7 +333,6 @@ function isPickerState(value: unknown): value is PickerState {
     (state.defaultDeck === undefined || (Array.isArray(state.defaultDeck) && state.defaultDeck.every(isImportedSong))) &&
     typeof state.currentIndex === 'number' &&
     Number.isInteger(state.currentIndex) &&
-    state.currentIndex >= 0 &&
     Array.isArray(state.liked) &&
     state.liked.every(isImportedSong) &&
     Array.isArray(state.skipped) &&
