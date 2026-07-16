@@ -25,7 +25,7 @@ export async function POST(request: Request) {
     });
 
     if (error) {
-      return NextResponse.json({error: error.message}, {status: 400});
+      return NextResponse.json({error: getSupabaseAuthFailureMessage(error, process.env.NEXT_PUBLIC_SUPABASE_URL)}, {status: getAuthServerErrorStatus(error)});
     }
 
     return NextResponse.json({session: data.session});
