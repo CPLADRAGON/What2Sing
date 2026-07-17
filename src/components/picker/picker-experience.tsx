@@ -32,6 +32,8 @@ import {
   type PickerState
 } from '@/lib/picker/session';
 
+type SaveStatus = 'idle' | 'saving' | 'synced' | 'local' | 'error';
+
 export function PickerExperience() {
   const t = useTranslations('picker');
   const locale = useLocale();
@@ -56,6 +58,8 @@ export function PickerExperience() {
   const [viewMode, setViewMode] = useState<'swipe' | 'selection'>('swipe');
   const [swipeDirection, setSwipeDirection] = useState<1 | -1 | 0>(0);
   const [saveMessage, setSaveMessage] = useState('');
+  const [saveWarning, setSaveWarning] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
   const [isDragging, setIsDragging] = useState(false);
   const [isSwipeLocked, setIsSwipeLocked] = useState(false);
   const [isShufflingDeck, setIsShufflingDeck] = useState(false);
@@ -65,6 +69,10 @@ export function PickerExperience() {
   const swipeTimerRef = useRef<number | null>(null);
   const feedbackTimerRef = useRef<number | null>(null);
   const saveMessageTimerRef = useRef<number | null>(null);
+  const saveWarningTimerRef = useRef<number | null>(null);
+  const saveStatusTimerRef = useRef<number | null>(null);
+  const saveStatusRunRef = useRef(0);
+  const isMountedRef = useRef(true);
   const flingRef = useRef<ReturnType<typeof animate> | null>(null);
   const lastHapticThreshold = useRef(0);
   const activeBatchId = useRef<string | null>(null);
@@ -202,13 +210,34 @@ export function PickerExperience() {
     };
   }, [isDragging, isShufflingDeck, isSwipeLocked, needsOrderChoice]);
 
-  useEffect(() => () => {
-    [shuffleTimerRef, swipeTimerRef, feedbackTimerRef, saveMessageTimerRef].forEach((timerRef) => {
-      if (timerRef.current !== null) {
-        window.clearTimeout(timerRef.current);
-      }
-    });
+  useEffect(() => {
+    isMountedRef.current = true;
+
+    return () => {
+      [shuffleTimerRef, swipeTimerRef, feedbackTimerRef, saveMessageTimerRef, saveWarningTimerRef, saveStatusTimerRef].forEach((timerRef) => {
+        if (timerRef.current !== null) {
+          window.clearTimeout(timerRef.current);
+        }
+      });
+      isMountedRef.current = false;
+    };
   }, []);
+
+  function scheduleSaveStatus(nextStatus: SaveStatus, saveRun?: number) {
+    if (saveStatusTimerRef.current !== null) {
+      window.clearTimeout(saveStatusTimerRef.current);
+    }
+
+    saveStatusTimerRef.current = window.setTimeout(() => {
+      saveStatusTimerRef.current = null;
+
+      if (!isMountedRef.current || (saveRun !== undefined && saveStatusRunRef.current !== saveRun)) {
+        return;
+      }
+
+      setSaveStatus(nextStatus);
+    }, 0);
+  }
 
   const stopFlingAndReset = useCallback(() => {
     if (flingRef.current) {
@@ -224,9 +253,44 @@ export function PickerExperience() {
       return;
     }
 
-    safeSetItem(PICKER_STORAGE_KEY, serializePickerState(state));
-    void savePickerStateForCurrentUser(state);
+    const saved = safeSetItem(PICKER_STORAGE_KEY, serializePickerState(state));
+    const saveRun = saveStatusRunRef.current + 1;
+    saveStatusRunRef.current = saveRun;
+    const savePromise = savePickerStateForCurrentUser(state);
 
+    if (!saved) {
+      scheduleSaveStatus('error', saveRun);
+      void savePromise.catch(() => undefined);
+    } else {
+      scheduleSaveStatus('saving', saveRun);
+      void savePromise.then((result) => {
+        if (!isMountedRef.current || saveStatusRunRef.current !== saveRun) {
+          return;
+        }
+
+        if (result.saved) {
+          setSaveStatus('synced');
+        } else if (result.reason === 'database-error') {
+          setSaveStatus('error');
+        } else {
+          setSaveStatus('local');
+        }
+      }).catch(() => {
+        if (!isMountedRef.current || saveStatusRunRef.current !== saveRun) {
+          return;
+        }
+
+        setSaveStatus('error');
+      });
+    }
+
+    if (saveWarningTimerRef.current !== null) {
+      window.clearTimeout(saveWarningTimerRef.current);
+    }
+    saveWarningTimerRef.current = window.setTimeout(() => {
+      setSaveWarning(!saved);
+      saveWarningTimerRef.current = null;
+    }, 0);
     if (activeBatchId.current) {
       saveBatchSession(activeBatchId.current, state);
     }
@@ -264,6 +328,22 @@ export function PickerExperience() {
   }, [library, safeState.liked]);
 
   const hasPickedSongs = allPickedSongs.length > 0;
+  const saveStatusLabel = saveStatus === 'saving'
+    ? t('saveStatusSaving')
+    : saveStatus === 'synced'
+      ? t('saveStatusSynced')
+      : saveStatus === 'local'
+        ? t('saveStatusLocal')
+        : saveStatus === 'error'
+          ? t('saveStatusError')
+          : '';
+  const saveStatusClass = saveStatus === 'error'
+    ? 'border-karaoke/30 bg-karaoke/10 text-karaoke'
+    : saveStatus === 'local'
+      ? 'border-white/10 bg-white/[0.05] text-ink-soft'
+      : saveStatus === 'synced'
+        ? 'border-karaoke-cyan/30 bg-karaoke-cyan/10 text-karaoke-cyan'
+        : 'border-white/10 bg-white/[0.05] text-body-muted';
 
   function handleRemovePick(indexToRemove: number) {
     const rawLib = safeGetItem(LIBRARY_STORAGE_KEY);
@@ -477,8 +557,20 @@ export function PickerExperience() {
           {t('saveAndExit')}
         </button>
         <span className="text-xs font-black uppercase tracking-[0.22em] text-karaoke">{t('title')}</span>
-        <span className="text-xs text-body-muted">{safeState.currentIndex}/{safeState.deck.length}</span>
+        <span aria-live="polite" className="flex items-center gap-2">
+          {saveStatusLabel ? (
+            <span className={`rounded-full border px-2 py-1 text-[10px] font-bold ${saveStatusClass}`}>
+              {saveStatusLabel}
+            </span>
+          ) : null}
+          <span className="text-xs text-body-muted">{safeState.currentIndex}/{safeState.deck.length}</span>
+        </span>
       </nav>
+      {saveWarning ? (
+        <div role="status" className="relative z-10 mx-auto mt-2 max-w-md rounded-2xl border border-karaoke/30 bg-karaoke/10 px-4 py-3 text-xs leading-5 text-karaoke">
+          {t('saveWarning')}
+        </div>
+      ) : null}
       {saveMessage ? <p className="relative z-10 mx-auto mt-2 max-w-md text-center text-xs text-karaoke-cyan">{saveMessage}</p> : null}
 
       {viewMode === 'selection' ? (

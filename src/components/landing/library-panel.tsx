@@ -36,6 +36,9 @@ type LibraryPanelProps = {
   handleRemoveSongFromBatch: (song: ImportedSong) => void;
   libraryExpanded: boolean;
   setLibraryExpanded: Dispatch<SetStateAction<boolean>>;
+  handleExportBackup: () => void;
+  handleImportBackupClick: () => void;
+  backupMessage: string;
 };
 
 function subscribeToShareSupport() {
@@ -74,7 +77,10 @@ export function LibraryPanel({
   handleResetBatch,
   handleRemoveSongFromBatch,
   libraryExpanded,
-  setLibraryExpanded
+  setLibraryExpanded,
+  handleExportBackup,
+  handleImportBackupClick,
+  backupMessage
 }: LibraryPanelProps) {
   const t = useTranslations('landing');
   const prefersReducedMotion = useReducedMotion();
@@ -114,6 +120,20 @@ export function LibraryPanel({
             </div>
             {libraryExpanded ? (
               <>
+                <div className="mb-3 rounded-2xl border border-karaoke-cyan/15 bg-karaoke-cyan/[0.06] p-3">
+                  <p className="text-xs font-black uppercase tracking-[0.18em] text-karaoke-cyan">{t('backupTitle')}</p>
+                  <div className="mt-2 grid grid-cols-2 gap-2">
+                    <button type="button" onClick={handleExportBackup} className="h-9 rounded-xl border border-karaoke-cyan/20 bg-karaoke-cyan/10 text-[10px] font-black text-karaoke-cyan transition hover:bg-karaoke-cyan/20">
+                      {t('exportBackup')}
+                    </button>
+                    <button type="button" onClick={handleImportBackupClick} className="h-9 rounded-xl border border-white/10 bg-white/[0.04] text-[10px] font-black text-ink-soft transition hover:bg-white/10">
+                      {t('importBackup')}
+                    </button>
+                  </div>
+                  {backupMessage ? (
+                    <p aria-live="polite" className="mt-2 text-xs leading-5 text-ink-soft">{backupMessage}</p>
+                  ) : null}
+                </div>
                 {library && (library.songs.length > 0 || savedLikedSongs.length > 0) ? (
                   <>
                     {/* ── Tab bar ── */}

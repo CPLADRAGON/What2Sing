@@ -152,7 +152,9 @@ export function removeSongFromLibrary(library: SongLibrary, song: ImportedSong):
     ...library,
     songs: library.songs.filter((_, i) => i !== songIndex),
     batches: updatedBatches,
-    pickedSongs: library.pickedSongs.filter((s) => songKey(s) !== key),
+    // Picked songs are the user's curated selection; removing a song from the
+    // imported source list must not delete it from their already-picked songs.
+    pickedSongs: library.pickedSongs,
     updatedAt: new Date().toISOString()
   };
 }
@@ -166,13 +168,14 @@ export function removeBatchFromLibrary(library: SongLibrary, batchId: string): S
 
   const batch = library.batches[batchIndex];
   const startIndex = library.batches.slice(0, batchIndex).reduce((sum, b) => sum + b.songCount, 0);
-  const removedSongs = new Set(library.songs.slice(startIndex, startIndex + batch.songCount).map(songKey));
 
   return {
     ...library,
     songs: library.songs.filter((_, i) => i < startIndex || i >= startIndex + batch.songCount),
     batches: library.batches.filter((b) => b.id !== batchId),
-    pickedSongs: library.pickedSongs.filter((s) => !removedSongs.has(songKey(s))),
+    // Deleting an imported list only removes the import source; the user's picked
+    // songs are kept so curated selections are never lost by managing imports.
+    pickedSongs: library.pickedSongs,
     updatedAt: new Date().toISOString()
   };
 }
@@ -227,6 +230,71 @@ export function migrateFromLegacyPickerState(defaultDeck: ImportedSong[], import
     songs: defaultDeck,
     batches: importBatches,
     pickedSongs,
+    updatedAt: new Date().toISOString()
+  };
+}
+
+export const LIBRARY_BACKUP_VERSION = 1;
+
+type LibraryBackup = {
+  app: 'ktv-picker';
+  type: 'library-backup';
+  version: number;
+  exportedAt: string;
+  library: SongLibrary;
+};
+
+// Serialize the whole library (imported songs, batches, and picked songs) into a
+// portable, versioned backup the user can download and later restore.
+export function exportLibraryBackup(library: SongLibrary): string {
+  const backup: LibraryBackup = {
+    app: 'ktv-picker',
+    type: 'library-backup',
+    version: LIBRARY_BACKUP_VERSION,
+    exportedAt: new Date().toISOString(),
+    library
+  };
+
+  return JSON.stringify(backup, null, 2);
+}
+
+// Accepts either a wrapped backup ({library: ...}) or a raw serialized library.
+export function parseLibraryBackup(value: string): SongLibrary | null {
+  try {
+    const parsed = JSON.parse(value) as unknown;
+
+    if (parsed && typeof parsed === 'object' && 'library' in parsed) {
+      return deserializeLibrary(JSON.stringify((parsed as {library: unknown}).library));
+    }
+
+    return deserializeLibrary(value);
+  } catch {
+    return null;
+  }
+}
+
+// Non-destructive union of picked songs. Restoring a backup can only ADD missing
+// picks, never remove existing ones, so a restore can't lose the user's selection.
+export function mergePickedSongs(base: SongLibrary, incoming: SongLibrary): SongLibrary {
+  const existingKeys = new Set(base.pickedSongs.map(songKey));
+  const additions = incoming.pickedSongs.filter((song) => {
+    const key = songKey(song);
+
+    if (existingKeys.has(key)) {
+      return false;
+    }
+
+    existingKeys.add(key);
+    return true;
+  });
+
+  if (additions.length === 0) {
+    return base;
+  }
+
+  return {
+    ...base,
+    pickedSongs: [...base.pickedSongs, ...additions],
     updatedAt: new Date().toISOString()
   };
 }

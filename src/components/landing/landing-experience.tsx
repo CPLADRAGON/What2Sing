@@ -4,13 +4,13 @@ import {motion, useReducedMotion} from 'framer-motion';
 import {useLocale, useTranslations} from 'next-intl';
 import Link from 'next/link';
 import {useRouter} from 'next/navigation';
-import {useEffect, useMemo, useRef, useState} from 'react';
+import {useEffect, useMemo, useRef, useState, type ChangeEvent} from 'react';
 import {getUserDisplayName} from '@/lib/auth/profile';
 import {normalizeSongs} from '@/lib/importers/manual';
 import type {ImportedSong} from '@/lib/importers/qq';
 import {loadLatestPickerStateForCurrentUser, saveImportedDeckForCurrentUser, saveLibraryForCurrentUser, savePickerStateForCurrentUser, chooseSyncedLibrary, loadLibraryForCurrentUser} from '@/lib/picker/persistence';
 import {generateSingingOrder, pickRandomSong} from '@/lib/picker/queue';
-import {addSongsToLibrary, createLibrary, deserializeLibrary, getSongsForBatch, LIBRARY_STORAGE_KEY, migrateFromLegacyPickerState, quickAddPickedSong, removePickedSongFromLibrary, removeBatchFromLibrary, removeSongFromLibrary, serializeLibrary, type ImportBatch, type SongLibrary} from '@/lib/picker/library';
+import {addSongsToLibrary, createLibrary, deserializeLibrary, exportLibraryBackup, getSongsForBatch, LIBRARY_STORAGE_KEY, mergePickedSongs, migrateFromLegacyPickerState, parseLibraryBackup, quickAddPickedSong, removePickedSongFromLibrary, removeBatchFromLibrary, removeSongFromLibrary, serializeLibrary, type ImportBatch, type SongLibrary} from '@/lib/picker/library';
 import {chooseSyncedPickerState, createPickerState, deserializePickerState, loadBatchSessions, PICKER_STORAGE_KEY, removeBatchSession, saveBatchSession, serializePickerState, type BatchSessionMap} from '@/lib/picker/session';
 import {songKey} from '@/lib/picker/song-key';
 import {safeGetItem, safeRemoveItem, safeSetItem} from '@/lib/safe-storage';
@@ -26,6 +26,10 @@ type DuplicateImportSummary = {
   total: number;
 };
 
+function isLibraryEmpty(library: SongLibrary) {
+  return library.songs.length === 0 && library.pickedSongs.length === 0;
+}
+
 export function LandingExperience() {
   const t = useTranslations('landing');
   const locale = useLocale();
@@ -38,6 +42,8 @@ export function LandingExperience() {
   const [songs, setSongs] = useState<ImportedSong[]>([]);
   const [status, setStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
   const [message, setMessage] = useState('');
+  const [backupMessage, setBackupMessage] = useState('');
+  const [saveWarning, setSaveWarning] = useState(false);
   const [duplicateImportSummary, setDuplicateImportSummary] = useState<DuplicateImportSummary | null>(null);
   const [library, setLibrary] = useState<SongLibrary | null>(null);
   const savedLikedSongs = useMemo(() => library?.pickedSongs ?? [], [library]);
@@ -53,14 +59,19 @@ export function LandingExperience() {
   const [libraryExpanded, setLibraryExpanded] = useState(true);
   const [activeTab, setActiveTab] = useState<'selected' | 'imported'>('selected');
   const [exportMessage, setExportMessage] = useState('');
+  const [guestNudgeDismissed, setGuestNudgeDismissed] = useState(() => safeGetItem('ktv-picker:guest-nudge-dismissed') === '1');
   const [batchSessions, setBatchSessions] = useState<BatchSessionMap>({});
   const [expandedBatches, setExpandedBatches] = useState<Set<string>>(new Set());
   const [librarySearch, setLibrarySearch] = useState('');
   const queueCardRef = useRef<HTMLDivElement>(null);
+  const backupFileInputRef = useRef<HTMLInputElement>(null);
   const exportMessageTimerRef = useRef<number | null>(null);
   const quickAddMessageTimerRef = useRef<number | null>(null);
+  const backupMessageTimerRef = useRef<number | null>(null);
   const steps = t.raw('steps') as string[];
   const loadingSteps = t.raw('loadingSteps') as string[];
+  const hasGuestData = (library?.songs.length ?? 0) > 0 || savedLikedSongs.length > 0;
+  const showGuestNudge = !displayName && Boolean(supabase) && hasGuestData && !guestNudgeDismissed;
   const queueText = useMemo(() => {
     if (generatedQueue.length === 0) {
       return '';
@@ -98,7 +109,7 @@ export function LandingExperience() {
       }
 
       if (lib) {
-        safeSetItem(LIBRARY_STORAGE_KEY, serializeLibrary(lib));
+        persistLibraryLocally(lib);
         setLibrary(lib);
       }
 
@@ -128,12 +139,30 @@ export function LandingExperience() {
   }, []);
 
   useEffect(() => () => {
-    [exportMessageTimerRef, quickAddMessageTimerRef].forEach((timerRef) => {
+    [exportMessageTimerRef, quickAddMessageTimerRef, backupMessageTimerRef].forEach((timerRef) => {
       if (timerRef.current !== null) {
         window.clearTimeout(timerRef.current);
       }
     });
   }, []);
+
+  function persistLibraryLocally(nextLibrary: SongLibrary) {
+    const saved = safeSetItem(LIBRARY_STORAGE_KEY, serializeLibrary(nextLibrary));
+    setSaveWarning(!saved);
+    return saved;
+  }
+
+  function showBackupMessage(nextMessage: string) {
+    if (backupMessageTimerRef.current !== null) {
+      window.clearTimeout(backupMessageTimerRef.current);
+    }
+
+    setBackupMessage(nextMessage);
+    backupMessageTimerRef.current = window.setTimeout(() => {
+      setBackupMessage('');
+      backupMessageTimerRef.current = null;
+    }, 3000);
+  }
 
   function showQuickAddMessage(nextMessage: string, nextStatus: 'success' | 'duplicate') {
     if (quickAddMessageTimerRef.current !== null) {
@@ -147,6 +176,11 @@ export function LandingExperience() {
       setQuickAddStatus('idle');
       quickAddMessageTimerRef.current = null;
     }, 2400);
+  }
+
+  function dismissGuestNudge() {
+    safeSetItem('ktv-picker:guest-nudge-dismissed', '1');
+    setGuestNudgeDismissed(true);
   }
 
   function generateLandingQueue() {
@@ -175,7 +209,7 @@ export function LandingExperience() {
       return;
     }
 
-    safeSetItem(LIBRARY_STORAGE_KEY, serializeLibrary(result.library));
+    persistLibraryLocally(result.library);
     setLibrary(result.library);
     void saveLibraryForCurrentUser(result.library);
     setQuickAddTitle('');
@@ -191,7 +225,7 @@ export function LandingExperience() {
 
     const currentLib = library ?? createLibrary();
     const updated = removeBatchFromLibrary(currentLib, batchId);
-    safeSetItem(LIBRARY_STORAGE_KEY, serializeLibrary(updated));
+    persistLibraryLocally(updated);
     setLibrary(updated);
     void saveLibraryForCurrentUser(updated);
 
@@ -206,7 +240,7 @@ export function LandingExperience() {
 
     const currentLib = library ?? createLibrary();
     const updated = removeSongFromLibrary(currentLib, song);
-    safeSetItem(LIBRARY_STORAGE_KEY, serializeLibrary(updated));
+    persistLibraryLocally(updated);
     setLibrary(updated);
     void saveLibraryForCurrentUser(updated);
   }
@@ -219,7 +253,7 @@ export function LandingExperience() {
     const currentLib = library ?? createLibrary();
     const removedSong = currentLib.pickedSongs[index];
     const updated = removePickedSongFromLibrary(currentLib, index);
-    safeSetItem(LIBRARY_STORAGE_KEY, serializeLibrary(updated));
+    persistLibraryLocally(updated);
     setLibrary(updated);
     void saveLibraryForCurrentUser(updated);
 
@@ -238,6 +272,50 @@ export function LandingExperience() {
       }
 
       setGeneratedQueue((q) => q.filter((s) => songKey(s) !== removedKey));
+    }
+  }
+
+  function handleExportBackup() {
+    if (!library || isLibraryEmpty(library)) {
+      showBackupMessage(t('backupEmpty'));
+      return;
+    }
+
+    const blob = new Blob([exportLibraryBackup(library)], {type: 'application/json;charset=utf-8'});
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    const date = new Date().toISOString().slice(0, 10);
+    link.href = url;
+    link.download = `ktv-picker-backup-${date}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async function handleImportBackup(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+
+    if (!file) {
+      return;
+    }
+
+    try {
+      const parsed = parseLibraryBackup(await file.text());
+
+      if (!parsed) {
+        showBackupMessage(t('backupInvalid'));
+        return;
+      }
+
+      const currentLib = library ?? createLibrary();
+      const updated = library && !isLibraryEmpty(currentLib) ? mergePickedSongs(currentLib, parsed) : parsed;
+      persistLibraryLocally(updated);
+      setLibrary(updated);
+      void saveLibraryForCurrentUser(updated);
+      showBackupMessage(t('backupRestored', {count: updated.pickedSongs.length}));
+    } catch {
+      showBackupMessage(t('backupInvalid'));
+    } finally {
+      event.target.value = '';
     }
   }
 
@@ -385,7 +463,7 @@ export function LandingExperience() {
 
       const currentLib = library ?? createLibrary();
       const libResult = addSongsToLibrary(currentLib, nextSongs, batchLabel);
-      safeSetItem(LIBRARY_STORAGE_KEY, serializeLibrary(libResult.library));
+      persistLibraryLocally(libResult.library);
       setLibrary(libResult.library);
       void saveLibraryForCurrentUser(libResult.library);
 
@@ -448,6 +526,31 @@ export function LandingExperience() {
         </Link>
         </div>
       </nav>
+
+      {saveWarning ? (
+        <div role="status" className="relative z-10 mx-auto mt-3 max-w-6xl rounded-2xl border border-karaoke/30 bg-karaoke/10 px-4 py-3 text-xs leading-5 text-karaoke">
+          {t('saveWarning')}
+        </div>
+      ) : null}
+
+      {showGuestNudge ? (
+        <div className="relative z-10 mx-auto mt-3 flex max-w-6xl items-start gap-3 rounded-2xl border border-karaoke-cyan/20 bg-surface-card/85 px-4 py-3 text-xs leading-5 text-ink-soft shadow-[0_18px_60px_rgba(0,0,0,0.2)] backdrop-blur-xl">
+          <p className="min-w-0 flex-1">
+            {t('guestNudgeMessage')}{' '}
+            <Link href={`/${locale}/login`} className="font-black text-karaoke-cyan underline-offset-4 hover:underline">
+              {t('guestNudgeCta')}
+            </Link>
+          </p>
+          <button
+            type="button"
+            onClick={dismissGuestNudge}
+            aria-label={t('guestNudgeDismiss')}
+            className="grid h-7 w-7 shrink-0 place-items-center rounded-full border border-white/10 text-ink-soft transition hover:border-white/25 hover:bg-white/10"
+          >
+            ×
+          </button>
+        </div>
+      ) : null}
 
       <section className="relative z-10 mx-auto grid max-w-6xl gap-10 pb-12 pt-12 lg:grid-cols-[1.04fr_0.96fr] lg:items-center lg:pb-20 lg:pt-20">
         <motion.div initial={prefersReducedMotion ? false : {opacity: 0, y: 22}} animate={{opacity: 1, y: 0}} transition={prefersReducedMotion ? {duration: 0} : {duration: 0.65}}>
@@ -635,7 +738,11 @@ export function LandingExperience() {
             handleRemoveSongFromBatch={handleRemoveSongFromBatch}
             libraryExpanded={libraryExpanded}
             setLibraryExpanded={setLibraryExpanded}
+            handleExportBackup={handleExportBackup}
+            handleImportBackupClick={() => backupFileInputRef.current?.click()}
+            backupMessage={backupMessage}
           />
+          <input ref={backupFileInputRef} type="file" accept="application/json,.json" onChange={handleImportBackup} className="hidden" />
         </motion.div>
       </section>
 

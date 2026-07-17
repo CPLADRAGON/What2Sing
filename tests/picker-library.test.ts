@@ -3,10 +3,15 @@ import {
   addSongsToLibrary,
   createLibrary,
   deserializeLibrary,
+  exportLibraryBackup,
   getSongsForBatch,
+  mergePickedSongs,
   migrateFromLegacyPickerState,
+  parseLibraryBackup,
   quickAddPickedSong,
+  removeBatchFromLibrary,
   removePickedSongFromLibrary,
+  removeSongFromLibrary,
   serializeLibrary,
   syncPickedSongsToLibrary
 } from '@/lib/picker/library';
@@ -148,5 +153,55 @@ describe('song library', () => {
 
     expect(second.added).toBe(false);
     expect(second.library.pickedSongs).toEqual([songs[0]]);
+  });
+
+  it('keeps picked songs when their imported batch is deleted', () => {
+    const withBatch = addSongsToLibrary(createLibrary(), songs, 'QQ Music').library;
+    const withPicks = syncPickedSongsToLibrary(withBatch, [songs[0], songs[1]]);
+    const batchId = withPicks.batches[0].id;
+
+    const afterDelete = removeBatchFromLibrary(withPicks, batchId);
+
+    expect(afterDelete.songs).toEqual([]);
+    expect(afterDelete.batches).toEqual([]);
+    expect(afterDelete.pickedSongs).toEqual([songs[0], songs[1]]);
+  });
+
+  it('keeps a picked song when it is removed from the imported list', () => {
+    const withBatch = addSongsToLibrary(createLibrary(), songs, 'QQ Music').library;
+    const withPicks = syncPickedSongsToLibrary(withBatch, [songs[0]]);
+
+    const afterRemove = removeSongFromLibrary(withPicks, songs[0]);
+
+    expect(afterRemove.songs).not.toContainEqual(songs[0]);
+    expect(afterRemove.pickedSongs).toEqual([songs[0]]);
+  });
+
+  it('round-trips a library through backup export and parse', () => {
+    const withBatch = addSongsToLibrary(createLibrary(), songs, 'QQ Music').library;
+    const withPicks = syncPickedSongsToLibrary(withBatch, [songs[0], songs[2]]);
+
+    const restored = parseLibraryBackup(exportLibraryBackup(withPicks));
+
+    expect(restored).not.toBeNull();
+    expect(restored?.songs).toEqual(withPicks.songs);
+    expect(restored?.batches).toEqual(withPicks.batches);
+    expect(restored?.pickedSongs).toEqual(withPicks.pickedSongs);
+  });
+
+  it('parses a raw (unwrapped) library export and rejects garbage', () => {
+    const raw = serializeLibrary(syncPickedSongsToLibrary(createLibrary(), [songs[0]]));
+
+    expect(parseLibraryBackup(raw)?.pickedSongs).toEqual([songs[0]]);
+    expect(parseLibraryBackup('not json')).toBeNull();
+  });
+
+  it('merges picked songs additively without duplicates', () => {
+    const base = syncPickedSongsToLibrary(createLibrary(), [songs[0]]);
+    const incoming = syncPickedSongsToLibrary(createLibrary(), [songs[0], songs[1]]);
+
+    const merged = mergePickedSongs(base, incoming);
+
+    expect(merged.pickedSongs).toEqual([songs[0], songs[1]]);
   });
 });
