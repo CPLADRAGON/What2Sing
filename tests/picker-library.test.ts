@@ -5,6 +5,7 @@ import {
   deserializeLibrary,
   exportLibraryBackup,
   getSongsForBatch,
+  mergeLibraries,
   mergePickedSongs,
   migrateFromLegacyPickerState,
   parseLibraryBackup,
@@ -203,5 +204,21 @@ describe('song library', () => {
     const merged = mergePickedSongs(base, incoming);
 
     expect(merged.pickedSongs).toEqual([songs[0], songs[1]]);
+  });
+
+  it('unions two libraries, deduping overlapping songs and adjusting batch counts', () => {
+    const base = addSongsToLibrary(createLibrary(), [songs[0], songs[1]], 'QQ Music').library;
+    // incoming shares songs[1] and adds songs[2]; overlap should not be duplicated.
+    const incoming = addSongsToLibrary(createLibrary(), [songs[1], songs[2]], 'NetEase').library;
+
+    const merged = mergeLibraries(base, incoming);
+
+    expect(merged.songs).toEqual([songs[0], songs[1], songs[2]]);
+    expect(merged.batches).toHaveLength(2);
+    expect(merged.batches[0].songCount).toBe(2);
+    expect(merged.batches[1].songCount).toBe(1);
+    // getSongsForBatch stays valid after the merge (contiguous invariant preserved).
+    expect(getSongsForBatch(merged, merged.batches[0].id)).toEqual([songs[0], songs[1]]);
+    expect(getSongsForBatch(merged, merged.batches[1].id)).toEqual([songs[2]]);
   });
 });

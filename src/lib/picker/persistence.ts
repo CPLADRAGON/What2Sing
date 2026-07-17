@@ -1,7 +1,7 @@
 import type {ImportedSong} from '@/lib/importers/qq';
 import {safeGetItem, safeRemoveItem, safeSetItem} from '@/lib/safe-storage';
 import {supabase} from '@/lib/supabase';
-import {deserializeLibrary, LIBRARY_STORAGE_KEY, mergePickedSongs, serializeLibrary, type SongLibrary} from './library';
+import {deserializeLibrary, LIBRARY_STORAGE_KEY, mergeLibraries, serializeLibrary, type SongLibrary} from './library';
 import {deserializePickerState, PICKER_STORAGE_KEY, type PickerState} from './session';
 
 const SUPABASE_SESSION_ID_KEY = 'ktv-picker:supabase-session-id';
@@ -246,15 +246,22 @@ export function chooseSyncedLibrary(localLib: SongLibrary | null, remoteLib: Son
   const remoteIsNewer = Date.parse(remoteLib.updatedAt) > Date.parse(localLib.updatedAt);
   const newer = remoteIsNewer ? remoteLib : localLib;
   const older = remoteIsNewer ? localLib : remoteLib;
-  // Sync is deliberately additive for picks: this prevents losing curated songs,
-  // but a pick deleted on one device may reappear from another stale device.
-  const merged = mergePickedSongs(newer, older);
+  // Union the whole library (imported songs, batches, and picks) so a device's list
+  // is never hidden or overwritten by another device. Deliberately additive: a delete
+  // on one device may reappear from another that still has the item.
+  const merged = mergeLibraries(newer, older);
 
-  if (merged === newer) {
+  // Fast path: if the older copy added nothing new, keep the newer object untouched to
+  // avoid needless re-persist/upload churn.
+  if (
+    merged.songs.length === newer.songs.length &&
+    merged.batches.length === newer.batches.length &&
+    merged.pickedSongs.length === newer.pickedSongs.length
+  ) {
     return newer;
   }
 
-  return {...merged, updatedAt: newer.updatedAt};
+  return merged;
 }
 
 function normalizePersistedSongsPayload(value: unknown): PersistedSongsPayload {

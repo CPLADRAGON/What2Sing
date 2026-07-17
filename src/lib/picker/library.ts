@@ -298,3 +298,77 @@ export function mergePickedSongs(base: SongLibrary, incoming: SongLibrary): Song
     updatedAt: new Date().toISOString()
   };
 }
+
+// Non-destructive union of two libraries: imported songs, batches, AND picked songs
+// are all preserved (deduped by songKey / batch id), so syncing across devices never
+// hides or overwrites an imported list. `base` wins ordering (pass the newer record).
+// Tradeoff: a deletion on one device can reappear from another device that still has
+// the item — deletions do not propagate through a union merge.
+export function mergeLibraries(base: SongLibrary, incoming: SongLibrary): SongLibrary {
+  const songs: ImportedSong[] = [];
+  const batches: ImportBatch[] = [];
+  const seenSongKeys = new Set<string>();
+  const seenBatchIds = new Set<string>();
+
+  const addBatchedSongs = (lib: SongLibrary) => {
+    for (const batch of lib.batches) {
+      if (seenBatchIds.has(batch.id)) {
+        continue;
+      }
+
+      const batchSongs = getSongsForBatch(lib, batch.id).filter((song) => !seenSongKeys.has(songKey(song)));
+
+      if (batchSongs.length === 0) {
+        continue;
+      }
+
+      seenBatchIds.add(batch.id);
+
+      for (const song of batchSongs) {
+        seenSongKeys.add(songKey(song));
+        songs.push(song);
+      }
+
+      batches.push({...batch, songCount: batchSongs.length});
+    }
+  };
+
+  const addUnbatchedTail = (lib: SongLibrary) => {
+    const batchedCount = lib.batches.reduce((sum, batch) => sum + batch.songCount, 0);
+
+    for (const song of lib.songs.slice(batchedCount)) {
+      if (seenSongKeys.has(songKey(song))) {
+        continue;
+      }
+
+      seenSongKeys.add(songKey(song));
+      songs.push(song);
+    }
+  };
+
+  // Batched songs first (kept contiguous so getSongsForBatch stays valid), then any
+  // unbatched tail songs (e.g. quick-added picks that were also added to songs).
+  addBatchedSongs(base);
+  addBatchedSongs(incoming);
+  addUnbatchedTail(base);
+  addUnbatchedTail(incoming);
+
+  const pickedKeys = new Set(base.pickedSongs.map(songKey));
+  const pickedSongs = [...base.pickedSongs];
+
+  for (const pick of incoming.pickedSongs) {
+    const key = songKey(pick);
+
+    if (!pickedKeys.has(key)) {
+      pickedKeys.add(key);
+      pickedSongs.push(pick);
+    }
+  }
+
+  return {
+    songs,
+    batches,
+    pickedSongs,
+    updatedAt: new Date().toISOString()
+  };
+}

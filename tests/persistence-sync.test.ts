@@ -45,7 +45,7 @@ describe('library sync pick merging', () => {
     expect(chooseSyncedLibrary(null, remote)).toBe(remote);
   });
 
-  it('keeps newer remote structure and unions local-only picks without duplicates', () => {
+  it('unions imported songs and batches (newer first) and unions picks', () => {
     const local = library({
       songs: songs.slice(0, 2),
       batches: [localBatch],
@@ -61,13 +61,13 @@ describe('library sync pick merging', () => {
 
     const synced = chooseSyncedLibrary(local, remote);
 
-    expect(synced?.songs).toBe(remote.songs);
-    expect(synced?.batches).toBe(remote.batches);
-    expect(synced?.updatedAt).toBe(remote.updatedAt);
+    // remote is newer, so its imports come first, then local's are appended.
+    expect(synced?.songs).toEqual([songs[2], songs[3], songs[0], songs[1]]);
+    expect(synced?.batches.map((batch) => batch.id)).toEqual([remoteBatch.id, localBatch.id]);
     expect(synced?.pickedSongs).toEqual([songs[0], songs[2], songs[1]]);
   });
 
-  it('keeps newer local structure and unions remote-only picks', () => {
+  it('keeps a newer local list first and still includes remote imports and picks', () => {
     const local = library({
       songs: songs.slice(0, 2),
       batches: [localBatch],
@@ -83,13 +83,33 @@ describe('library sync pick merging', () => {
 
     const synced = chooseSyncedLibrary(local, remote);
 
-    expect(synced?.songs).toBe(local.songs);
-    expect(synced?.batches).toBe(local.batches);
-    expect(synced?.updatedAt).toBe(local.updatedAt);
+    expect(synced?.songs).toEqual([songs[0], songs[1], songs[2], songs[3]]);
+    expect(synced?.batches.map((batch) => batch.id)).toEqual([localBatch.id, remoteBatch.id]);
     expect(synced?.pickedSongs).toEqual([songs[0], songs[1], songs[2]]);
   });
 
-  it('does not duplicate identical picks and preserves base order', () => {
+  it('does not let a newer-but-empty local library hide the imported list', () => {
+    const emptyNewerLocal = library({
+      songs: [],
+      batches: [],
+      pickedSongs: [],
+      updatedAt: '2026-07-17T12:00:00.000Z'
+    });
+    const remote = library({
+      songs: songs.slice(0, 2),
+      batches: [localBatch],
+      pickedSongs: [songs[0]],
+      updatedAt: '2026-07-17T09:00:00.000Z'
+    });
+
+    const synced = chooseSyncedLibrary(emptyNewerLocal, remote);
+
+    expect(synced?.songs).toEqual(songs.slice(0, 2));
+    expect(synced?.batches.map((batch) => batch.id)).toEqual([localBatch.id]);
+    expect(synced?.pickedSongs).toEqual([songs[0]]);
+  });
+
+  it('keeps the newer object unchanged when nothing new is contributed', () => {
     const local = library({
       pickedSongs: [songs[1], songs[0]],
       updatedAt: '2026-07-17T10:00:00.000Z'
