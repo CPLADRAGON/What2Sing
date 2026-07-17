@@ -33,6 +33,9 @@ import {
 } from '@/lib/picker/session';
 
 type SaveStatus = 'idle' | 'saving' | 'synced' | 'local' | 'error';
+type PersistenceResult = Awaited<ReturnType<typeof savePickerStateForCurrentUser>>;
+
+const REMOTE_SAVE_DEBOUNCE_MS = 1500;
 
 export function PickerExperience() {
   const t = useTranslations('picker');
@@ -71,6 +74,10 @@ export function PickerExperience() {
   const saveMessageTimerRef = useRef<number | null>(null);
   const saveWarningTimerRef = useRef<number | null>(null);
   const saveStatusTimerRef = useRef<number | null>(null);
+  const remoteSaveTimerRef = useRef<number | null>(null);
+  const latestPickerStateToSaveRef = useRef<PickerState | null>(null);
+  const latestLibraryToSaveRef = useRef<SongLibrary | null>(null);
+  const hasPendingRemoteSaveRef = useRef(false);
   const saveStatusRunRef = useRef(0);
   const isMountedRef = useRef(true);
   const flingRef = useRef<ReturnType<typeof animate> | null>(null);
@@ -83,6 +90,63 @@ export function PickerExperience() {
   const currentSongKey = currentSong ? `${currentSong.title}-${currentSong.artist}-${currentSong.platform}-${safeState.currentIndex}` : 'complete';
   const complete = isPickerComplete(safeState);
   const progress = safeState.deck.length ? Math.min(100, Math.round((safeState.currentIndex / safeState.deck.length) * 100)) : 0;
+
+
+  const flushPendingRemoteSaves = useCallback(async (saveRun?: number) => {
+    if (remoteSaveTimerRef.current !== null) {
+      window.clearTimeout(remoteSaveTimerRef.current);
+      remoteSaveTimerRef.current = null;
+    }
+
+    if (!hasPendingRemoteSaveRef.current) {
+      return;
+    }
+
+    const pickerStateToSave = latestPickerStateToSaveRef.current;
+    const libraryToSave = latestLibraryToSaveRef.current;
+    latestPickerStateToSaveRef.current = null;
+    latestLibraryToSaveRef.current = null;
+    hasPendingRemoteSaveRef.current = false;
+
+    if (!pickerStateToSave && !libraryToSave) {
+      return;
+    }
+
+    try {
+      const pickerResult = pickerStateToSave ? await savePickerStateForCurrentUser(pickerStateToSave) : null;
+      const libraryResult = libraryToSave ? await saveLibraryForCurrentUser(libraryToSave).catch(() => null) : null;
+      const result: PersistenceResult | null = pickerResult ?? libraryResult;
+
+      if (!result || saveRun === undefined || !isMountedRef.current || saveStatusRunRef.current !== saveRun) {
+        return;
+      }
+
+      if (result.saved) {
+        setSaveStatus('synced');
+      } else if (result.reason === 'database-error') {
+        setSaveStatus('error');
+      } else {
+        setSaveStatus('local');
+      }
+    } catch {
+      if (!isMountedRef.current || saveRun === undefined || saveStatusRunRef.current !== saveRun) {
+        return;
+      }
+
+      setSaveStatus('error');
+    }
+  }, []);
+
+  const queueRemoteSave = useCallback((saveRun?: number) => {
+    if (remoteSaveTimerRef.current !== null) {
+      window.clearTimeout(remoteSaveTimerRef.current);
+    }
+
+    remoteSaveTimerRef.current = window.setTimeout(() => {
+      remoteSaveTimerRef.current = null;
+      void flushPendingRemoteSaves(saveRun);
+    }, REMOTE_SAVE_DEBOUNCE_MS);
+  }, [flushPendingRemoteSaves]);
 
   useEffect(() => {
     let isMounted = true;
@@ -214,6 +278,7 @@ export function PickerExperience() {
     isMountedRef.current = true;
 
     return () => {
+      void flushPendingRemoteSaves();
       [shuffleTimerRef, swipeTimerRef, feedbackTimerRef, saveMessageTimerRef, saveWarningTimerRef, saveStatusTimerRef].forEach((timerRef) => {
         if (timerRef.current !== null) {
           window.clearTimeout(timerRef.current);
@@ -221,7 +286,7 @@ export function PickerExperience() {
       });
       isMountedRef.current = false;
     };
-  }, []);
+  }, [flushPendingRemoteSaves]);
 
   function scheduleSaveStatus(nextStatus: SaveStatus, saveRun?: number) {
     if (saveStatusTimerRef.current !== null) {
@@ -256,32 +321,13 @@ export function PickerExperience() {
     const saved = safeSetItem(PICKER_STORAGE_KEY, serializePickerState(state));
     const saveRun = saveStatusRunRef.current + 1;
     saveStatusRunRef.current = saveRun;
-    const savePromise = savePickerStateForCurrentUser(state);
+    latestPickerStateToSaveRef.current = state;
+    hasPendingRemoteSaveRef.current = true;
 
     if (!saved) {
       scheduleSaveStatus('error', saveRun);
-      void savePromise.catch(() => undefined);
     } else {
       scheduleSaveStatus('saving', saveRun);
-      void savePromise.then((result) => {
-        if (!isMountedRef.current || saveStatusRunRef.current !== saveRun) {
-          return;
-        }
-
-        if (result.saved) {
-          setSaveStatus('synced');
-        } else if (result.reason === 'database-error') {
-          setSaveStatus('error');
-        } else {
-          setSaveStatus('local');
-        }
-      }).catch(() => {
-        if (!isMountedRef.current || saveStatusRunRef.current !== saveRun) {
-          return;
-        }
-
-        setSaveStatus('error');
-      });
     }
 
     if (saveWarningTimerRef.current !== null) {
@@ -300,9 +346,12 @@ export function PickerExperience() {
       const currentLib = deserializeLibrary(rawLib) ?? createLibrary();
       const updatedLib = syncPickedSongsToLibrary(currentLib, state.liked);
       safeSetItem(LIBRARY_STORAGE_KEY, serializeLibrary(updatedLib));
-      void saveLibraryForCurrentUser(updatedLib);
+      latestLibraryToSaveRef.current = updatedLib;
+      hasPendingRemoteSaveRef.current = true;
     }
-  }, [needsOrderChoice, state]);
+
+    queueRemoteSave(saved ? saveRun : undefined);
+  }, [needsOrderChoice, queueRemoteSave, state]);
 
   const nextSongs = useMemo(() => safeState.deck.slice(safeState.currentIndex + 1, safeState.currentIndex + 4), [safeState]);
   const isDealing = isSwipeLocked && !isDragging;
@@ -485,9 +534,11 @@ export function PickerExperience() {
     stopFlingAndReset();
   }
 
-  function saveAndExit() {
+  async function saveAndExit() {
     if (state) {
       safeSetItem(PICKER_STORAGE_KEY, serializePickerState(state));
+      latestPickerStateToSaveRef.current = state;
+      hasPendingRemoteSaveRef.current = true;
     }
     if (saveMessageTimerRef.current !== null) {
       window.clearTimeout(saveMessageTimerRef.current);
@@ -497,6 +548,7 @@ export function PickerExperience() {
       setSaveMessage('');
       saveMessageTimerRef.current = null;
     }, 2000);
+    await flushPendingRemoteSaves();
     router.push(`/${locale}`);
   }
 

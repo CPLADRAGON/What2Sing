@@ -1,7 +1,7 @@
 import type {ImportedSong} from '@/lib/importers/qq';
 import {safeGetItem, safeRemoveItem, safeSetItem} from '@/lib/safe-storage';
 import {supabase} from '@/lib/supabase';
-import {deserializeLibrary, LIBRARY_STORAGE_KEY, serializeLibrary, type SongLibrary} from './library';
+import {deserializeLibrary, LIBRARY_STORAGE_KEY, mergePickedSongs, serializeLibrary, type SongLibrary} from './library';
 import {deserializePickerState, PICKER_STORAGE_KEY, type PickerState} from './session';
 
 const SUPABASE_SESSION_ID_KEY = 'ktv-picker:supabase-session-id';
@@ -243,7 +243,18 @@ export function chooseSyncedLibrary(localLib: SongLibrary | null, remoteLib: Son
     return localLib;
   }
 
-  return Date.parse(remoteLib.updatedAt) > Date.parse(localLib.updatedAt) ? remoteLib : localLib;
+  const remoteIsNewer = Date.parse(remoteLib.updatedAt) > Date.parse(localLib.updatedAt);
+  const newer = remoteIsNewer ? remoteLib : localLib;
+  const older = remoteIsNewer ? localLib : remoteLib;
+  // Sync is deliberately additive for picks: this prevents losing curated songs,
+  // but a pick deleted on one device may reappear from another stale device.
+  const merged = mergePickedSongs(newer, older);
+
+  if (merged === newer) {
+    return newer;
+  }
+
+  return {...merged, updatedAt: newer.updatedAt};
 }
 
 function normalizePersistedSongsPayload(value: unknown): PersistedSongsPayload {

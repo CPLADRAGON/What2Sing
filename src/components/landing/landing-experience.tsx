@@ -4,7 +4,7 @@ import {motion, useReducedMotion} from 'framer-motion';
 import {useLocale, useTranslations} from 'next-intl';
 import Link from 'next/link';
 import {useRouter} from 'next/navigation';
-import {useEffect, useMemo, useRef, useState, type ChangeEvent} from 'react';
+import {useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent} from 'react';
 import {getUserDisplayName} from '@/lib/auth/profile';
 import {normalizeSongs} from '@/lib/importers/manual';
 import type {ImportedSong} from '@/lib/importers/qq';
@@ -68,6 +68,8 @@ export function LandingExperience() {
   const exportMessageTimerRef = useRef<number | null>(null);
   const quickAddMessageTimerRef = useRef<number | null>(null);
   const backupMessageTimerRef = useRef<number | null>(null);
+  const isMountedRef = useRef(true);
+  const lastSyncedUserIdRef = useRef<string | null>(null);
   const steps = t.raw('steps') as string[];
   const loadingSteps = t.raw('loadingSteps') as string[];
   const hasGuestData = (library?.songs.length ?? 0) > 0 || savedLikedSongs.length > 0;
@@ -83,45 +85,58 @@ export function LandingExperience() {
     return [header, ...lines, '', footer].join('\n');
   }, [generatedQueue, t]);
 
-  useEffect(() => {
-    let isMounted = true;
+  const syncCloudProgress = useCallback(async () => {
+    const localState = deserializePickerState(safeGetItem(PICKER_STORAGE_KEY));
+    const remoteSession = await loadLatestPickerStateForCurrentUser();
+    const savedState = chooseSyncedPickerState(localState, remoteSession?.state ?? null);
 
-    async function loadSavedProgress() {
-      const localState = deserializePickerState(safeGetItem(PICKER_STORAGE_KEY));
-      const remoteSession = await loadLatestPickerStateForCurrentUser();
-      const savedState = chooseSyncedPickerState(localState, remoteSession?.state ?? null);
-
-      if (!isMounted) {
-        return;
-      }
-
-      if (savedState) {
-        safeSetItem(PICKER_STORAGE_KEY, serializePickerState(savedState));
-      }
-
-      const localLib = deserializeLibrary(safeGetItem(LIBRARY_STORAGE_KEY));
-      const remoteLib = await loadLibraryForCurrentUser();
-      let lib = chooseSyncedLibrary(localLib, remoteLib);
-
-      if (!lib && savedState) {
-        const legacyBatches = ((savedState as unknown as Record<string, unknown>).importBatches ?? []) as ImportBatch[];
-        lib = migrateFromLegacyPickerState(savedState.defaultDeck, legacyBatches, savedState.liked);
-      }
-
-      if (lib) {
-        persistLibraryLocally(lib);
-        setLibrary(lib);
-      }
-
-      setBatchSessions(loadBatchSessions());
+    if (!isMountedRef.current) {
+      return;
     }
 
-    void loadSavedProgress();
+    if (savedState) {
+      safeSetItem(PICKER_STORAGE_KEY, serializePickerState(savedState));
+    }
+
+    const localLib = deserializeLibrary(safeGetItem(LIBRARY_STORAGE_KEY));
+    const remoteLib = await loadLibraryForCurrentUser();
+    let lib = chooseSyncedLibrary(localLib, remoteLib);
+
+    if (!lib && savedState) {
+      const legacyBatches = ((savedState as unknown as Record<string, unknown>).importBatches ?? []) as ImportBatch[];
+      lib = migrateFromLegacyPickerState(savedState.defaultDeck, legacyBatches, savedState.liked);
+    }
+
+    if (!isMountedRef.current) {
+      return;
+    }
+
+    if (lib) {
+      safeSetItem(LIBRARY_STORAGE_KEY, serializeLibrary(lib));
+      setLibrary(lib);
+    }
+
+    setBatchSessions(loadBatchSessions());
+
+    // Push the merged result back to the cloud so a freshly signed-in account also
+    // gets any local (guest) picks/progress. These are no-ops while signed out.
+    if (lib) {
+      void saveLibraryForCurrentUser(lib);
+    }
+
+    if (savedState) {
+      void savePickerStateForCurrentUser(savedState);
+    }
+  }, []);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    void syncCloudProgress();
 
     return () => {
-      isMounted = false;
+      isMountedRef.current = false;
     };
-  }, []);
+  }, [syncCloudProgress]);
 
   useEffect(() => {
     const client = supabase;
@@ -133,10 +148,21 @@ export function LandingExperience() {
     void client.auth.getSession().then(({data}) => setDisplayName(getUserDisplayName(data.session?.user ?? null)));
     const {data: subscription} = client.auth.onAuthStateChange((_event, session) => {
       setDisplayName(getUserDisplayName(session?.user ?? null));
+
+      const userId = session?.user?.id ?? null;
+
+      if (userId && userId !== lastSyncedUserIdRef.current) {
+        // A user just signed in (or switched): pull + merge cloud data and push
+        // local guest data up, so progress and picks sync across devices on login.
+        lastSyncedUserIdRef.current = userId;
+        void syncCloudProgress();
+      } else if (!userId) {
+        lastSyncedUserIdRef.current = null;
+      }
     });
 
     return () => subscription.subscription.unsubscribe();
-  }, []);
+  }, [syncCloudProgress]);
 
   useEffect(() => () => {
     [exportMessageTimerRef, quickAddMessageTimerRef, backupMessageTimerRef].forEach((timerRef) => {
