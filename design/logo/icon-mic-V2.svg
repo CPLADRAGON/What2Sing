@@ -2,15 +2,11 @@
   <defs>
     <linearGradient id="pc" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff3d8b"/><stop offset="1" stop-color="#55e6ff"/></linearGradient>
     <linearGradient id="pcFill" x1="0" y1="0" x2="0.6" y2="1"><stop offset="0" stop-color="#ff3d8b"/><stop offset="1" stop-color="#55e6ff"/></linearGradient>
+    <radialGradient id="bg" cx="0.5" cy="0.0" r="1"><stop offset="0" stop-color="#0c0c12"/><stop offset="1" stop-color="#050507"/></radialGradient>
     <linearGradient id="appbg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#15151b"/><stop offset="1" stop-color="#0a0a0c"/></linearGradient>
+    <linearGradient id="pinkbg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff3d8b"/><stop offset="1" stop-color="#ff6aa8"/></linearGradient>
   </defs>
-  <rect width="512" height="512" rx="120" fill="url(#appbg)"/>
-  <g transform="translate(66 66) scale(1.9)">
-    <g fill="none" stroke="#55e6ff" stroke-width="8" stroke-linecap="round" opacity="0.75">
-      <path d="M40 66 q-10 22 0 44"/>
-      <path d="M56 60 q-12 28 0 56"/>
-    </g>
-    <g transform="rotate(14 100 104)">
+    <rect width="512" height="512" rx="120" fill="url(#appbg)"/><g transform="translate(56 56) scale(2)">
     <g>
       <rect x="64" y="24" width="72" height="86" rx="36" fill="url(#pcFill)"/>
       <path d="M82 106 L118 106 L112 170 Q112 178 104 178 L96 178 Q88 178 88 170 Z" fill="url(#pcFill)"/>
@@ -21,4 +17,8 @@
         <line x1="80" y1="76" x2="120" y2="76"/>
         <line x1="80" y1="90" x2="120" y2="90"/>
       </g>
-    </g></g></g></svg>
+    </g>
+    <g fill="none" stroke="url(#pc)" stroke-width="10" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M150 62 l20 22 -20 22" opacity="0.95"/>
+      <path d="M172 62 l14 22 -14 22" opacity="0.4"/>
+    </g></g></svg>

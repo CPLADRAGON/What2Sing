@@ -5,6 +5,7 @@ import {useLocale, useTranslations} from 'next-intl';
 import Link from 'next/link';
 import {useRouter} from 'next/navigation';
 import {useCallback, useEffect, useMemo, useRef, useState, type ChangeEvent} from 'react';
+import {LogoMark} from '@/components/brand/logo-mark';
 import {getUserDisplayName} from '@/lib/auth/profile';
 import {normalizeSongs} from '@/lib/importers/manual';
 import type {ImportedSong} from '@/lib/importers/qq';
@@ -529,7 +530,7 @@ export function LandingExperience() {
 
       <nav className="relative z-10 mx-auto flex max-w-6xl items-center justify-between gap-2 rounded-full border border-hairline-strong bg-white/[0.03] px-3 py-3 backdrop-blur-xl sm:px-4">
         <Link href={`/${locale}`} className="flex min-w-0 items-center gap-2 font-display text-sm font-black tracking-tight">
-          <span className="grid h-8 w-8 place-items-center rounded-full bg-white text-canvas">唱</span>
+          <LogoMark className="h-8 w-8" />
           <span className="hidden xs:inline sm:inline">KTV-Picker</span>
         </Link>
         <div className="flex items-center gap-2">

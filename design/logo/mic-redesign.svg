@@ -1,0 +1,175 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1320" height="900" viewBox="0 0 1320 900">
+  <defs>
+    <linearGradient id="pc" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff3d8b"/><stop offset="1" stop-color="#55e6ff"/></linearGradient>
+    <linearGradient id="pcFill" x1="0" y1="0" x2="0.6" y2="1"><stop offset="0" stop-color="#ff3d8b"/><stop offset="1" stop-color="#55e6ff"/></linearGradient>
+    <radialGradient id="bg" cx="0.5" cy="0.0" r="1"><stop offset="0" stop-color="#0c0c12"/><stop offset="1" stop-color="#050507"/></radialGradient>
+    <linearGradient id="appbg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#15151b"/><stop offset="1" stop-color="#0a0a0c"/></linearGradient>
+    <linearGradient id="pinkbg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff3d8b"/><stop offset="1" stop-color="#ff6aa8"/></linearGradient>
+  </defs>
+  <rect width="1320" height="900" fill="url(#bg)"/>
+  <circle cx="100" cy="40" r="220" fill="#ff3d8b" opacity="0.07"/>
+  <text x="60" y="78" font-family="Segoe UI, Arial, sans-serif" font-weight="800" font-size="38" fill="#ffffff">What2Sing · handheld mic — redesign</text>
+  <text x="62" y="110" font-family="Segoe UI, Arial, sans-serif" font-weight="400" font-size="18" fill="#8a8a95">One connected shape (no separate stand). Pick a direction below.</text><g transform="translate(60 150)"><rect width="240" height="240" rx="56" fill="url(#appbg)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/><g transform="scale(1.2)">
+    <g>
+      <rect x="64" y="24" width="72" height="86" rx="36" fill="url(#pcFill)"/>
+      <path d="M82 106 L118 106 L112 170 Q112 178 104 178 L96 178 Q88 178 88 170 Z" fill="url(#pcFill)"/>
+      <rect x="76" y="103" width="48" height="6" rx="3" fill="#050507" fill-opacity="0.35"/>
+      <g stroke="#050507" stroke-opacity="0.45" stroke-width="5" stroke-linecap="round">
+        <line x1="80" y1="48" x2="120" y2="48"/>
+        <line x1="80" y1="62" x2="120" y2="62"/>
+        <line x1="80" y1="76" x2="120" y2="76"/>
+        <line x1="80" y1="90" x2="120" y2="90"/>
+      </g>
+    </g></g></g><text x="60" y="430" font-family="Segoe UI, Arial, sans-serif" font-weight="700" font-size="22" fill="#ffffff">V1 · Clean mic</text><text x="60" y="458" font-family="Segoe UI, Arial, sans-serif" font-weight="400" font-size="16" fill="#8a8a95">pure karaoke handheld</text><g transform="translate(360 150)"><rect width="240" height="240" rx="56" fill="url(#appbg)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/><g transform="scale(1.2)">
+    <g>
+      <rect x="64" y="24" width="72" height="86" rx="36" fill="url(#pcFill)"/>
+      <path d="M82 106 L118 106 L112 170 Q112 178 104 178 L96 178 Q88 178 88 170 Z" fill="url(#pcFill)"/>
+      <rect x="76" y="103" width="48" height="6" rx="3" fill="#050507" fill-opacity="0.35"/>
+      <g stroke="#050507" stroke-opacity="0.45" stroke-width="5" stroke-linecap="round">
+        <line x1="80" y1="48" x2="120" y2="48"/>
+        <line x1="80" y1="62" x2="120" y2="62"/>
+        <line x1="80" y1="76" x2="120" y2="76"/>
+        <line x1="80" y1="90" x2="120" y2="90"/>
+      </g>
+    </g>
+    <g fill="none" stroke="url(#pc)" stroke-width="10" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M150 62 l20 22 -20 22" opacity="0.95"/>
+      <path d="M172 62 l14 22 -14 22" opacity="0.4"/>
+    </g></g></g><text x="360" y="430" font-family="Segoe UI, Arial, sans-serif" font-weight="700" font-size="22" fill="#ffffff">V2 · Mic + swipe</text><text x="360" y="458" font-family="Segoe UI, Arial, sans-serif" font-weight="400" font-size="16" fill="#8a8a95">swipe-to-pick identity (recommended)</text><g transform="translate(660 150)"><rect width="240" height="240" rx="56" fill="url(#appbg)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/><g transform="scale(1.2)">
+    <g fill="none" stroke="#55e6ff" stroke-width="8" stroke-linecap="round" opacity="0.75">
+      <path d="M40 66 q-10 22 0 44"/>
+      <path d="M56 60 q-12 28 0 56"/>
+    </g>
+    <g transform="rotate(14 100 104)">
+    <g>
+      <rect x="64" y="24" width="72" height="86" rx="36" fill="url(#pcFill)"/>
+      <path d="M82 106 L118 106 L112 170 Q112 178 104 178 L96 178 Q88 178 88 170 Z" fill="url(#pcFill)"/>
+      <rect x="76" y="103" width="48" height="6" rx="3" fill="#050507" fill-opacity="0.35"/>
+      <g stroke="#050507" stroke-opacity="0.45" stroke-width="5" stroke-linecap="round">
+        <line x1="80" y1="48" x2="120" y2="48"/>
+        <line x1="80" y1="62" x2="120" y2="62"/>
+        <line x1="80" y1="76" x2="120" y2="76"/>
+        <line x1="80" y1="90" x2="120" y2="90"/>
+      </g>
+    </g></g></g></g><text x="660" y="430" font-family="Segoe UI, Arial, sans-serif" font-weight="700" font-size="22" fill="#ffffff">V3 · In motion</text><text x="660" y="458" font-family="Segoe UI, Arial, sans-serif" font-weight="400" font-size="16" fill="#8a8a95">leaning into a swipe</text><text x="60" y="540" font-family="Segoe UI, Arial, sans-serif" font-weight="700" font-size="20" fill="#ffffff">V2 at app sizes</text><g transform="translate(60 560)"><rect width="120" height="120" rx="28" fill="url(#appbg)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/><g transform="scale(0.6)">
+    <g>
+      <rect x="64" y="24" width="72" height="86" rx="36" fill="url(#pcFill)"/>
+      <path d="M82 106 L118 106 L112 170 Q112 178 104 178 L96 178 Q88 178 88 170 Z" fill="url(#pcFill)"/>
+      <rect x="76" y="103" width="48" height="6" rx="3" fill="#050507" fill-opacity="0.35"/>
+      <g stroke="#050507" stroke-opacity="0.45" stroke-width="5" stroke-linecap="round">
+        <line x1="80" y1="48" x2="120" y2="48"/>
+        <line x1="80" y1="62" x2="120" y2="62"/>
+        <line x1="80" y1="76" x2="120" y2="76"/>
+        <line x1="80" y1="90" x2="120" y2="90"/>
+      </g>
+    </g>
+    <g fill="none" stroke="url(#pc)" stroke-width="10" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M150 62 l20 22 -20 22" opacity="0.95"/>
+      <path d="M172 62 l14 22 -14 22" opacity="0.4"/>
+    </g></g></g><g transform="translate(202 560)"><rect width="88" height="88" rx="21" fill="url(#appbg)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/><g transform="scale(0.44)">
+    <g>
+      <rect x="64" y="24" width="72" height="86" rx="36" fill="url(#pcFill)"/>
+      <path d="M82 106 L118 106 L112 170 Q112 178 104 178 L96 178 Q88 178 88 170 Z" fill="url(#pcFill)"/>
+      <rect x="76" y="103" width="48" height="6" rx="3" fill="#050507" fill-opacity="0.35"/>
+      <g stroke="#050507" stroke-opacity="0.45" stroke-width="5" stroke-linecap="round">
+        <line x1="80" y1="48" x2="120" y2="48"/>
+        <line x1="80" y1="62" x2="120" y2="62"/>
+        <line x1="80" y1="76" x2="120" y2="76"/>
+        <line x1="80" y1="90" x2="120" y2="90"/>
+      </g>
+    </g>
+    <g fill="none" stroke="url(#pc)" stroke-width="10" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M150 62 l20 22 -20 22" opacity="0.95"/>
+      <path d="M172 62 l14 22 -14 22" opacity="0.4"/>
+    </g></g></g><g transform="translate(312 560)"><rect width="64" height="64" rx="15" fill="url(#appbg)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/><g transform="scale(0.32)">
+    <g>
+      <rect x="64" y="24" width="72" height="86" rx="36" fill="url(#pcFill)"/>
+      <path d="M82 106 L118 106 L112 170 Q112 178 104 178 L96 178 Q88 178 88 170 Z" fill="url(#pcFill)"/>
+      <rect x="76" y="103" width="48" height="6" rx="3" fill="#050507" fill-opacity="0.35"/>
+      <g stroke="#050507" stroke-opacity="0.45" stroke-width="5" stroke-linecap="round">
+        <line x1="80" y1="48" x2="120" y2="48"/>
+        <line x1="80" y1="62" x2="120" y2="62"/>
+        <line x1="80" y1="76" x2="120" y2="76"/>
+        <line x1="80" y1="90" x2="120" y2="90"/>
+      </g>
+    </g>
+    <g fill="none" stroke="url(#pc)" stroke-width="10" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M150 62 l20 22 -20 22" opacity="0.95"/>
+      <path d="M172 62 l14 22 -14 22" opacity="0.4"/>
+    </g></g></g><g transform="translate(398 560)"><rect width="44" height="44" rx="10" fill="url(#appbg)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/><g transform="scale(0.22)">
+    <g>
+      <rect x="64" y="24" width="72" height="86" rx="36" fill="url(#pcFill)"/>
+      <path d="M82 106 L118 106 L112 170 Q112 178 104 178 L96 178 Q88 178 88 170 Z" fill="url(#pcFill)"/>
+      <rect x="76" y="103" width="48" height="6" rx="3" fill="#050507" fill-opacity="0.35"/>
+      <g stroke="#050507" stroke-opacity="0.45" stroke-width="5" stroke-linecap="round">
+        <line x1="80" y1="48" x2="120" y2="48"/>
+        <line x1="80" y1="62" x2="120" y2="62"/>
+        <line x1="80" y1="76" x2="120" y2="76"/>
+        <line x1="80" y1="90" x2="120" y2="90"/>
+      </g>
+    </g>
+    <g fill="none" stroke="url(#pc)" stroke-width="10" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M150 62 l20 22 -20 22" opacity="0.95"/>
+      <path d="M172 62 l14 22 -14 22" opacity="0.4"/>
+    </g></g></g><g transform="translate(464 560)"><rect width="32" height="32" rx="8" fill="url(#appbg)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/><g transform="scale(0.16)">
+    <g>
+      <rect x="64" y="24" width="72" height="86" rx="36" fill="url(#pcFill)"/>
+      <path d="M82 106 L118 106 L112 170 Q112 178 104 178 L96 178 Q88 178 88 170 Z" fill="url(#pcFill)"/>
+      <rect x="76" y="103" width="48" height="6" rx="3" fill="#050507" fill-opacity="0.35"/>
+      <g stroke="#050507" stroke-opacity="0.45" stroke-width="5" stroke-linecap="round">
+        <line x1="80" y1="48" x2="120" y2="48"/>
+        <line x1="80" y1="62" x2="120" y2="62"/>
+        <line x1="80" y1="76" x2="120" y2="76"/>
+        <line x1="80" y1="90" x2="120" y2="90"/>
+      </g>
+    </g>
+    <g fill="none" stroke="url(#pc)" stroke-width="10" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M150 62 l20 22 -20 22" opacity="0.95"/>
+      <path d="M172 62 l14 22 -14 22" opacity="0.4"/>
+    </g></g></g><g transform="translate(538 560)"><rect width="120" height="120" rx="28" fill="url(#pinkbg)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/><g transform="scale(0.6)">
+    <g>
+      <rect x="64" y="24" width="72" height="86" rx="36" fill="#0a0a0c"/>
+      <path d="M82 106 L118 106 L112 170 Q112 178 104 178 L96 178 Q88 178 88 170 Z" fill="#0a0a0c"/>
+      <rect x="76" y="103" width="48" height="6" rx="3" fill="#050507" fill-opacity="0.35"/>
+      <g stroke="#0a0a0c" stroke-opacity="0.45" stroke-width="5" stroke-linecap="round">
+        <line x1="80" y1="48" x2="120" y2="48"/>
+        <line x1="80" y1="62" x2="120" y2="62"/>
+        <line x1="80" y1="76" x2="120" y2="76"/>
+        <line x1="80" y1="90" x2="120" y2="90"/>
+      </g>
+    </g>
+    <g fill="none" stroke="#0a0a0c" stroke-width="10" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M150 62 l20 22 -20 22" opacity="0.95"/>
+      <path d="M172 62 l14 22 -14 22" opacity="0.4"/>
+    </g></g></g><text x="538" y="700" font-family="Segoe UI, Arial, sans-serif" font-weight="400" font-size="15" fill="#8a8a95">on pink</text><g transform="translate(678 560)"><rect width="120" height="120" rx="28" fill="url(#appbg)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/><g transform="scale(0.6)">
+    <g>
+      <rect x="64" y="24" width="72" height="86" rx="36" fill="#ffffff"/>
+      <path d="M82 106 L118 106 L112 170 Q112 178 104 178 L96 178 Q88 178 88 170 Z" fill="#ffffff"/>
+      <rect x="76" y="103" width="48" height="6" rx="3" fill="#050507" fill-opacity="0.35"/>
+      <g stroke="#050507" stroke-opacity="0.45" stroke-width="5" stroke-linecap="round">
+        <line x1="80" y1="48" x2="120" y2="48"/>
+        <line x1="80" y1="62" x2="120" y2="62"/>
+        <line x1="80" y1="76" x2="120" y2="76"/>
+        <line x1="80" y1="90" x2="120" y2="90"/>
+      </g>
+    </g>
+    <g fill="none" stroke="#ffffff" stroke-width="10" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M150 62 l20 22 -20 22" opacity="0.95"/>
+      <path d="M172 62 l14 22 -14 22" opacity="0.4"/>
+    </g></g></g><text x="678" y="700" font-family="Segoe UI, Arial, sans-serif" font-weight="400" font-size="15" fill="#8a8a95">mono</text><text x="60" y="760" font-family="Segoe UI, Arial, sans-serif" font-weight="700" font-size="20" fill="#ffffff">Lockup</text><g transform="translate(60 780)"><rect width="96" height="96" rx="24" fill="url(#appbg)" stroke="rgba(255,255,255,0.10)" stroke-width="1.5"/><g transform="scale(0.48)">
+    <g>
+      <rect x="64" y="24" width="72" height="86" rx="36" fill="url(#pcFill)"/>
+      <path d="M82 106 L118 106 L112 170 Q112 178 104 178 L96 178 Q88 178 88 170 Z" fill="url(#pcFill)"/>
+      <rect x="76" y="103" width="48" height="6" rx="3" fill="#050507" fill-opacity="0.35"/>
+      <g stroke="#050507" stroke-opacity="0.45" stroke-width="5" stroke-linecap="round">
+        <line x1="80" y1="48" x2="120" y2="48"/>
+        <line x1="80" y1="62" x2="120" y2="62"/>
+        <line x1="80" y1="76" x2="120" y2="76"/>
+        <line x1="80" y1="90" x2="120" y2="90"/>
+      </g>
+    </g>
+    <g fill="none" stroke="url(#pc)" stroke-width="10" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M150 62 l20 22 -20 22" opacity="0.95"/>
+      <path d="M172 62 l14 22 -14 22" opacity="0.4"/>
+    </g></g></g><g transform="translate(180 842) scale(1)" font-family="Segoe UI, Arial, sans-serif" font-weight="800" font-size="52">
+    <text x="0" y="0" fill="#ffffff">What</text><text x="132" y="0" fill="#55e6ff">2</text><text x="166" y="0" fill="#ffffff">Sing</text></g></svg>

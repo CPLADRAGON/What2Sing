@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="pc" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ff3d8b"/><stop offset="1" stop-color="#55e6ff"/>
+    </linearGradient>
+    <linearGradient id="pcFill" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ff3d8b"/><stop offset="1" stop-color="#55e6ff"/>
+    </linearGradient>
+    <radialGradient id="bg" cx="0.5" cy="0.0" r="1">
+      <stop offset="0" stop-color="#0c0c12"/><stop offset="1" stop-color="#050507"/>
+    </radialGradient>
+    <linearGradient id="appbg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#15151b"/><stop offset="1" stop-color="#0a0a0c"/>
+    </linearGradient>
+    <linearGradient id="cardFill" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1a1a22"/><stop offset="1" stop-color="#0c0c11"/>
+    </linearGradient>
+    <linearGradient id="pinkbg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ff3d8b"/><stop offset="1" stop-color="#ff6aa8"/>
+    </linearGradient>
+  </defs>
+    <rect width="512" height="512" rx="120" fill="url(#appbg)"/>
+    <g transform="translate(56 56) scale(2)">
+    <g>
+      <g transform="rotate(-13 100 100)"><rect x="52" y="40" width="96" height="126" rx="20" fill="#101014" stroke="rgba(255,255,255,0.10)" stroke-width="3"/></g>
+      <g transform="rotate(-5 100 100)"><rect x="52" y="36" width="96" height="126" rx="20" fill="#14141a" stroke="rgba(85,230,255,0.25)" stroke-width="3"/></g>
+      <g transform="rotate(4 100 100)">
+        <rect x="52" y="34" width="96" height="126" rx="20" fill="url(#cardFill)" stroke="url(#pc)" stroke-width="4"/>
+        <path d="M 100 107
+    C 83.5 95.6, 83.5 82.4, 93.4 81.8
+    C 98.5 81.5, 100 86, 100 88.4
+    C 100 86, 101.5 81.5, 106.6 81.8
+    C 116.5 82.4, 116.5 95.6, 100 107 Z" fill="url(#pc)"/>
+      </g>
+    </g></g></svg>
